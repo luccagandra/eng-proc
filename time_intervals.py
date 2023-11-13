@@ -4,6 +4,68 @@ import matplotlib
 matplotlib.use("TkAgg")  # Defina o backend para TkAgg
 import matplotlib.pyplot as plt
 
+matriz =[[10.0, 180.0, 90.0], # WCp, Q1_T0, Q1_Td
+         [2.0, 250.0, 140.0], # WCp, Q2_T0, Q2_Td
+         [5.0, 60.0, 150.0],  # WCp, F1_T0, F1_Td
+         [7.0, 100.0, 220.0]] # WCp, F2_T0, F2_Td
+
+matriz_2 = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
+            [1.5, 150.0, 30.0], # WCp, Q2_T0, Q2_Td
+            [2.0, 20.0, 135.0],  # WCp, F1_T0, F1_Td
+            [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
+
+intervals_2 = [160.0, 140.0, 135.0, 80.0, 50.0, 20.0]
+
+def RPS(matriz, temp_min):
+    count = 1
+    while True:
+        chosen_hot = -1
+        chosen_cold = -1
+
+        hot_candidates = [(matriz[i][1], i) for i in range(2)]
+        chosen_hot = 0 if hot_candidates[0][0] > hot_candidates[1][0] else 1
+        QMT0 = matriz[chosen_hot].copy()
+
+        max_value_cold = -1000
+        
+        for i in range(2, 4):
+            if QMT0[1] > (matriz[i][1] + temp_min) and matriz[i][1] > max_value_cold:
+                chosen_cold = i
+
+        FMT0 = matriz[chosen_cold].copy()
+
+        if chosen_cold == -1:
+            break
+
+        print(count, "Troca, corrente quente:", chosen_hot, QMT0)
+        print(count, "Troca, corrente fria:", chosen_cold, FMT0)
+
+        if QMT0[1] - FMT0[2] < temp_min: # TEQ* - TSF < temp_min
+            FMT0[2] = QMT0[1] - temp_min
+
+        if QMT0[2] - FMT0[1] < temp_min: # TSQ - TEF* < temp_min
+            QMT0[2] = FMT0[1] + temp_min
+        
+        Q = min((QMT0[1] - QMT0[2])*QMT0[0], (FMT0[2] - FMT0[1])*FMT0[0])
+        
+        if Q == (QMT0[1] - QMT0[2])*QMT0[0]: # Q = oferta
+            QMT0[2] = QMT0[2]
+            FMT0[2] = round(FMT0[1] + Q/FMT0[0],1)
+        
+        if Q == (FMT0[2] - FMT0[1])*FMT0[0]: # Q = demanda
+            QMT0[2] = round(QMT0[1] - Q/QMT0[0],1)
+            FMT0[2] = FMT0[2]
+        
+        #print("QMT0: ", QMT0)
+        #print("FMT0: ", FMT0)
+        
+        matriz[chosen_hot][1] = QMT0[2] # Entradas são as saídas do sistema anterior
+        matriz[chosen_cold][1] = FMT0[2]
+        
+        print("RPS:", matriz)
+        #display_table(matriz)
+        count += 1
+
 def display_table(data):
     root = tk.Tk()
     root.title("Table Display")
@@ -30,7 +92,15 @@ def display_table(data):
 
     root.mainloop()
 
-def offer_demand(matriz, intervals):
+def is_pair_overlapping(pair1, pair2):
+    # Sort the pairs to ensure proper comparison
+    pair1 = sorted(pair1)
+    pair2 = sorted(pair2)
+
+    # Check if pair1 is completely within pair2
+    return pair1[0] >= pair2[0] and pair1[1] <= pair2[1]
+
+def offer_demand(matriz, intervals, temp_min):
     
     Rk = 0
     a1 = 1
@@ -39,26 +109,26 @@ def offer_demand(matriz, intervals):
 
     for i in range(len(intervals)-1): 
         
-        if matriz[0][2] <= (intervals[i] + intervals[i+1])/2 <= matriz[0][1]: # passa por arrow1
+        if is_pair_overlapping((intervals[i]+temp_min, intervals[i+1]+temp_min), (matriz[0][2], matriz[0][1])): # passa por arrow1
             a1 = matriz[0][0]
         else:
             a1 = 0
 
-        if matriz[1][2] <= (intervals[i] + intervals[i+1])/2 <= matriz[1][1]: # passa por arrow2
+        if is_pair_overlapping((intervals[i]+temp_min, intervals[i+1]+temp_min), (matriz[1][2], matriz[1][1])): # passa por arrow2
             a2 = matriz[1][0]
         else:
             a2 = 0
 
-        if matriz[2][1] <= (intervals[i] + intervals[i+1])/2 <= matriz[2][2]: # passa por arrow3
+        if is_pair_overlapping((intervals[i], intervals[i+1]), (matriz[2][2], matriz[2][1])): # passa por arrow3
             a3 = matriz[2][0]
         else:
             a3 = 0
 
-        if matriz[3][1] <= (intervals[i] + intervals[i+1])/2 <= matriz[3][2]: # passa por arrow4
+        if is_pair_overlapping((intervals[i], intervals[i+1]), (matriz[3][2], matriz[3][1])): # passa por arrow4
             a4 = matriz[3][0]
         else:
             a4 = 0
-
+        
         y = (intervals[i]-intervals[i+1])
         lines = [Rk, y*a1 +y*a2, y*a3 +y*a4, Rk + y*a1 +y*a2 - y*a3 - y*a4]
 
@@ -69,8 +139,9 @@ def offer_demand(matriz, intervals):
         
         offer_demand.append(lines)
     
-    display_table(offer_demand)
+    #print(matriz)
     #print(offer_demand)
+    display_table(offer_demand)
         
 #offer_demand(matriz, intervals)
 
@@ -121,7 +192,8 @@ def criar_grafico(matriz):
     plt.grid(linestyle = '--')
     plt.show()
 
-    offer_demand(matriz, intervals)
+    print("Intervals", intervals)
+    offer_demand(matriz, intervals, 10)
 
 #criar_grafico(matriz)
 
@@ -134,14 +206,15 @@ def obter_numeros():
             valor = float(entrada_matriz[i][j].get())
             linha.append(valor)
         matriz.append(linha)
-    exibir_matriz(matriz)
+
+    #exibir_matriz(matriz)
     criar_grafico(matriz)
+    RPS(matriz, 10)
 
 def exibir_matriz(matriz):
     for i in range(4):
         for j in range(3):
             print(matriz[i][j], end="\t")
-        print()
 
 # Cria a janela da GUI
 janela = tk.Tk()
@@ -170,3 +243,6 @@ botao_processar.grid(row=5, columnspan=4)
 # Inicializa a GUI
 janela.mainloop()
 
+#offer_demand(matriz_2, intervals_2, 10)
+
+#RPS(matriz_2, 10)
