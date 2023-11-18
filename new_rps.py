@@ -142,7 +142,7 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10):
     count = 1
 
     #while type != None:
-    while count<5:
+    while count<1000:
         if count == 1: 
             new_matrix = matrix
             print("Matriz original: ",count,"\n")
