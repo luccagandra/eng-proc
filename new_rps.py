@@ -141,7 +141,7 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
     comb = (0,0)
     count = 1
     plot_multiple = []
-    plot_single = [0,0,0,0,0,0]
+    plot_single = [0,0,0,0,0,0,0,0]
 
     #while type != None:
     while count<1000:
@@ -168,7 +168,7 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
             F_x = comb[1]+1
 
         # Qx, Fx, Qx_valor, Fx_valor
-        plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0] # Sabemos as entradas, mas ainda não as saídas
+        plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0,0,0] # Sabemos as entradas, mas ainda não as saídas
     
         new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min)
         
@@ -178,7 +178,9 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
 
         plot_single[4] = new_matrix[Q_x-1][1] # Saída quente -> TSQ_valor
         plot_single[5] = new_matrix[F_x+1][1] # Saída fria -> TSF_valor
-        
+        plot_single[6] = new_matrix[Q_x-1][0] # Wcp_Q
+        plot_single[7] = new_matrix[F_x+1][0] # Wcp_F
+
         l1, l2 = len(new_matrix), len(new_matrix[0])
 
         #print(plot_single)
@@ -191,5 +193,7 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
     
     if plot == True:
         return plot_multiple, new_matrix
+
+last_matrix = [[10.0, 111.5, 90.0], [2.0, 140.0, 140.0], [5.0, 143.0, 150.0], [7.0, 170.0, 220.0]]
 
 plot_multiple, last_matrix = perform_RPS(matrix, plot=True)

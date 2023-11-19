@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
-def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True):
+def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, first=False):
     """
     Plot a point in a 2D Cartesian space, display a straight line segment around it,
     plot a number slightly offset from the center, and add labels at the ends of the segments.
@@ -15,13 +16,23 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True):
     - values: Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
     """
 
+    global custo_cap
+    global custo_util
+    global custo_total
+
+    if first==True:
+        custo_cap = 0
+        custo_util = 0
+        custo_total = 0
+
+    print(custo_cap)
     # Plotting the point
     plt.scatter(x, y, color='black', label='Point')
 
     # Displaying a straight line segment around the point
     segment_length = 1  # Length of the segment in both x and y directions
 
-    if type == 'reta':
+    if type == 'reta': # Usando trocador de integração
         plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
         plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
 
@@ -42,7 +53,17 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True):
         plt.text(x + segment_length/2, y + offset, f'{values[4]}', color='red', ha='left', va='center', fontsize=10)
         plt.text(x + offset, y - segment_length/2, f'{values[5]}', color='blue', ha='center', va='top', fontsize=10)
 
-    elif type == 'hot': # Usando água
+        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, WCp_Q, WCp_F
+        # Cálculo da Oferta e Demanda
+        oferta =  values[6] * (values[2] - values[4])
+        demanda = values[7] * (values[5] - values[3])
+
+        Q = min(oferta, demanda)
+        U = 0.75
+
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+
+    elif type == 'hot': # Usando água (resfriador)
         plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='blue')
         plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
         
@@ -50,7 +71,17 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True):
         plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, values[3], color='blue', ha='right', va='center', fontsize=10)
         plt.text(x + segment_length/2, y + offset, values[4], color='red', ha='left', va='center', fontsize=10)
 
-    elif type == 'cold': # Usando vapor
+        Q =  values[6] * (values[2] - values[4])
+        U = 0.75
+
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+
+        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+
+        vazao = calculo_da_vazao(Q, 'água')
+        custo_util += custo_utilidades(vazao, 'água')
+
+    elif type == 'cold': # Usando vapor (aquecedor)
         plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='red')
         plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
 
@@ -58,15 +89,64 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True):
         plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, values[4], color='red', ha='right', va='center', fontsize=10)
         plt.text(x + offset, y - segment_length/2, values[5], color='blue', ha='center', va='top', fontsize=10)
 
+        Q = values[7] * (values[5] - values[3])
+        U = 1
+
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+
+        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+
+        vazao = calculo_da_vazao(Q, 'vapor')
+        custo_util += custo_utilidades(vazao, 'vapor')
+
     # Plotting the number slightly offset from the center
     plt.text(x + offset/2, y + offset/2, str(number), color='black', ha='center', va='center', fontsize=12, fontweight='bold')
+
+    custo_total = (custo_cap + custo_util)
 
     if single == True:
         # Adding labels, title, legend, and grid for better visualization
         plt.title('Rede Final')
         plt.grid(False)
         plt.axis('off')
+        print(custo_cap, custo_util, custo_total)
         plt.show()
+
+def calculo_da_vazao(Q, tipo):
+    if tipo == 'água':
+        W = Q/((0.00116)*(50-30))
+    if tipo == 'vapor':
+        W = Q/0.48
+
+    return W
+
+def custo_do_trocador(values, tipo, Q, U):
+
+    # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+
+    delta_1 = values[2] - values[5] # TEQ - TFS
+    delta_2 = values[4] - values[3] # TSQ - TEF
+
+    if tipo == 'aritmético':
+        area = Q / (U*(delta_1+delta_2)/2)
+    
+    if tipo == 'logarítmico':
+        if delta_1 == delta_2: # Não podemos passar na fórmula abaixo pq gera uma indeterminação
+            area = delta_1
+        else:
+            area = Q / (U*(delta_1-delta_2)/math.log(delta_1/delta_2))
+
+    custo_do_trocador = 130 * (math.pow(area, (65/100)))
+
+    return custo_do_trocador
+
+def custo_utilidades(consumo, tipo):
+    if tipo == 'água':
+        custo_unitario = 0.00005 # $/kg
+    if tipo == 'vapor':
+        custo_unitario = 0.0015 # $/kg
+
+    return 8500*(custo_unitario*consumo)
 
 def plot_multiple_transfers(plot_list, last_matrix):
     # Plotting the point
@@ -88,7 +168,7 @@ def plot_multiple_transfers(plot_list, last_matrix):
             plotted_out.append([values[4], 0,0, 'hot']) # TSQ, plotted at 0,0
             plotted_out.append([values[5], 0,0, 'cold']) # TSF, plotted at 0,0
 
-            plot_single_transfer(0,0,(i+1),values,'reta', single=False)
+            plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
             prev_value_x = 0
             prev_value_y = 0
             prev_values = values
@@ -98,13 +178,11 @@ def plot_multiple_transfers(plot_list, last_matrix):
                 x = prev_value_x
                 y = prev_value_y - 1
                 values_to_clear.append(values[3])
-                values[3] = None
 
             if values[2] == prev_values[4]: # Conexão por corrente quente
                 x = prev_value_x + 1
                 y = prev_value_y
                 values_to_clear.append(values[2])
-                values[2] = None
 
             prev_value_x = x
             prev_value_y = y
@@ -135,8 +213,9 @@ def plot_multiple_transfers(plot_list, last_matrix):
                         for k in range(len(last_matrix)):
                             if last_matrix[k][1] == plotted_out[a][0]:
                                 meta = last_matrix[k][2]
-                                
-                        values = [0,0,plotted_out[a][0],30,meta,50] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+                                WCp_Q = last_matrix[k][0]
+
+                        values = [0,0,plotted_out[a][0],30,meta,50,WCp_Q,0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
                         plot_single_transfer(plotted_out[a][1]+1, plotted_out[a][2], (a+i+2),values,'hot', single=single)
 
                     if plotted_out[a][3] == 'cold': # vapor de 250 a 250
@@ -144,8 +223,9 @@ def plot_multiple_transfers(plot_list, last_matrix):
                         for h in range(len(last_matrix)):
                             if last_matrix[h][1] == plotted_out[a][0]:
                                 meta = last_matrix[h][2]
+                                WCp_F = last_matrix[h][0]
 
-                        values = [0,0,250,plotted_out[a][0],250,meta] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+                        values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
                         plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
 
             else:
@@ -158,8 +238,8 @@ def plot_multiple_transfers(plot_list, last_matrix):
 # Example usage:
 #plot_single_transfer(1, 1, 1, offset=0.15)
 
-# Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-plot_list = [[2, 2, 250.0, 100.0, 140.0, 131.4], [1, 2, 180.0, 131.4, 153.0, 170.0], [1, 1, 153.0, 60.0, 111.5, 143.0]]
+# Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, WCp_Q, WCp_F
+plot_list = [[2, 2, 250.0, 100.0, 140.0, 131.4, 2.0, 7.0], [1, 2, 180.0, 131.4, 153.0, 170.0, 10.0, 7.0], [1, 1, 153.0, 60.0, 111.5, 143.0, 10.0, 5.0]]
 
 last_matrix = [[10.0, 111.5, 90.0], [2.0, 140.0, 140.0], [5.0, 143.0, 150.0], [7.0, 170.0, 220.0]]
 
