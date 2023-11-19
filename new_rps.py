@@ -136,10 +136,12 @@ def combinations(matrix):
     
     return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10):
+def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
 
     comb = (0,0)
     count = 1
+    plot_multiple = []
+    plot_single = [0,0,0,0,0,0]
 
     #while type != None:
     while count<1000:
@@ -165,15 +167,29 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10):
             Q_x = comb[0]+1
             F_x = comb[1]+1
 
+        # Qx, Fx, Qx_valor, Fx_valor
+        plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0] # Sabemos as entradas, mas ainda não as saídas
+    
         new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min)
         
         print("------------------------------")
         print("Número da troca: ",count,"\n")
         print("Q", comb[0]+1, "F", comb[1]+1,"\n", sep='')
 
-        l1, l2 = len(new_matrix), len(new_matrix[0])
-        print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
+        plot_single[4] = new_matrix[Q_x-1][1] # Saída quente -> TSQ_valor
+        plot_single[5] = new_matrix[F_x+1][1] # Saída fria -> TSF_valor
         
-        count+=1
+        l1, l2 = len(new_matrix), len(new_matrix[0])
 
-perform_RPS(matrix)
+        #print(plot_single)
+        #print("Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor")
+        print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
+
+        plot_multiple.append(plot_single)
+
+        count+=1
+    
+    if plot == True:
+        return plot_multiple, new_matrix
+
+plot_multiple, last_matrix = perform_RPS(matrix, plot=True)

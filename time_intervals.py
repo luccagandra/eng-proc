@@ -14,38 +14,61 @@ matriz_2 = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
             [2.0, 20.0, 135.0],  # WCp, F1_T0, F1_Td
             [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
 
+matriz_trabalho = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
+            [1.5, 150.0, 30.0], # WCp, Q2_T0, Q2_Td
+            [2.0, 30.0, 140.0],  # WCp, F1_T0, F1_Td
+            [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
+
+intervals_trabalho = [160.0, 140.0, 80.0, 50.0, 30.0, 20.0]
+
+matriz_acima_pinch = [[3.0, 170.0, 90.0], # WCp, Q1_T0, Q1_Td
+            [1.5, 150.0, 90.0], # WCp, Q2_T0, Q2_Td
+            [2.0, 80.0, 140.0],  # WCp, F1_T0, F1_Td
+            [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
+
+matriz_abaixo_pinch = [[3.0, 90.0, 60.0], # WCp, Q1_T0, Q1_Td
+            [1.5, 90.0, 30.0], # WCp, Q2_T0, Q2_Td
+            [2.0, 30.0, 80.0]]  # WCp, F1_T0, F1_Td
+
 intervals_2 = [160.0, 140.0, 135.0, 80.0, 50.0, 20.0]
 
-def RPS(matriz, temp_min):
+def RPS(matriz, temp_min, first_hot, first_cold):
     count = 1
-    while True:
-        chosen_hot = -1
-        chosen_cold = -1
 
-        hot_candidates = [(matriz[i][1], i) for i in range(2)]
-        chosen_hot = 0 if hot_candidates[0][0] > hot_candidates[1][0] else 1
-        QMT0 = matriz[chosen_hot].copy()
+    while count <= 10:   
+        chosen_hot = -1 
+        chosen_cold = -1 
 
-        max_value_cold = -1000
-        
-        for i in range(2, 4):
-            if QMT0[1] > (matriz[i][1] + temp_min) and matriz[i][1] > max_value_cold:
-                chosen_cold = i
+        if count != 1:
+            hot_candidates = [(matriz[i][1], i) for i in range(2)]
+            chosen_hot = 0 if hot_candidates[0][0] > hot_candidates[1][0] else 1
+            QMT0 = matriz[chosen_hot].copy()
 
-        FMT0 = matriz[chosen_cold].copy()
+            max_value_cold = -1000
+            
+            for i in range(2, 3): # Troca para 3
+                if QMT0[1] > (matriz[i][1] + temp_min) and matriz[i][1] > max_value_cold:
+                    chosen_cold = i
 
-        if chosen_cold == -1:
-            break
+            FMT0 = matriz[chosen_cold].copy()
 
-        print(count, "Troca, corrente quente:", chosen_hot, QMT0)
-        print(count, "Troca, corrente fria:", chosen_cold, FMT0)
+            if chosen_cold == -1:
+                break
+        else:
+            chosen_hot = first_hot
+            chosen_cold = first_cold 
+            QMT0 = matriz[chosen_hot].copy()
+            FMT0 = matriz[chosen_cold].copy()
 
-        if QMT0[1] - FMT0[2] < temp_min: # TEQ* - TSF < temp_min
+        print("Q", count, "Troca, corrente quente:", chosen_hot, QMT0)
+        print("F", count, "Troca, corrente fria:", chosen_cold, FMT0)
+
+        if QMT0[1] - FMT0[2] <= temp_min: # TEQ* - TSF < temp_min
             FMT0[2] = QMT0[1] - temp_min
 
-        if QMT0[2] - FMT0[1] < temp_min: # TSQ - TEF* < temp_min
+        if QMT0[2] - FMT0[1] <= temp_min: # TSQ - TEF* < temp_min
             QMT0[2] = FMT0[1] + temp_min
-        
+        #print(QMT0[2])
         Q = min((QMT0[1] - QMT0[2])*QMT0[0], (FMT0[2] - FMT0[1])*FMT0[0])
         
         if Q == (QMT0[1] - QMT0[2])*QMT0[0]: # Q = oferta
@@ -64,7 +87,14 @@ def RPS(matriz, temp_min):
         
         print("RPS:", matriz)
         #display_table(matriz)
+        
         count += 1
+
+#RPS(matriz_abaixo_pinch, 10, 0, 2) # Q1xF1
+
+RPS(matriz_acima_pinch, 10, 0, 3) # Q1xF2
+#RPS(matriz_acima_pinch, 10, 1, 2) # Q2xF1
+#RPS(matriz_acima_pinch, 10, 1, 3) # Q2xF2
 
 def display_table(data):
     root = tk.Tk()
@@ -195,7 +225,7 @@ def criar_grafico(matriz):
     print("Intervals", intervals)
     offer_demand(matriz, intervals, 10)
 
-#criar_grafico(matriz)
+criar_grafico(matriz_trabalho)
 
 # Função chamada quando o botão é clicado
 def obter_numeros():
@@ -215,6 +245,7 @@ def exibir_matriz(matriz):
     for i in range(4):
         for j in range(3):
             print(matriz[i][j], end="\t")
+
 
 # Cria a janela da GUI
 janela = tk.Tk()
