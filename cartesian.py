@@ -25,7 +25,6 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         custo_util = 0
         custo_total = 0
 
-    print(custo_cap)
     # Plotting the point
     plt.scatter(x, y, color='black', label='Point')
 
@@ -102,14 +101,26 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
     # Plotting the number slightly offset from the center
     plt.text(x + offset/2, y + offset/2, str(number), color='black', ha='center', va='center', fontsize=12, fontweight='bold')
 
-    custo_total = (custo_cap + custo_util)
+    custo_cap = round(custo_cap,1)
+    custo_util = round(custo_util,1)
+    custo_total = round(custo_cap + custo_util,1)
+    fig_size = plt.gcf().get_size_inches()
 
     if single == True:
         # Adding labels, title, legend, and grid for better visualization
         plt.title('Rede Final')
         plt.grid(False)
         plt.axis('off')
-        print(custo_cap, custo_util, custo_total)
+
+        text1 = f"Ccap = {custo_cap}"
+        text2 = f"Cutil = {custo_util}"
+        text3 = f"Ctotal = {custo_total}"
+
+        plt.text(x+2, 1, text1, ha='right', va='top', color='red', fontsize=10)
+        plt.text(x+2, 0.8, text2, ha='right', va='top', color='green', fontsize=10)
+        plt.text(x+2, 0.6, text3, ha='right', va='top', color='blue', fontsize=10)
+
+        #print(custo_cap, custo_util, custo_total)
         plt.show()
 
 def calculo_da_vazao(Q, tipo):
