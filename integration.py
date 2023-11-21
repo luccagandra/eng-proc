@@ -63,6 +63,7 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         demanda = values[7] * (values[5] - values[3])
 
         Q = min(oferta, demanda)
+
         U = 0.75
 
         custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
@@ -76,6 +77,7 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         plt.text(x + segment_length/2, y + offset, values[4], color='red', ha='left', va='center', fontsize=10)
 
         Q =  values[6] * (values[2] - values[4])
+
         U = 0.75
 
         custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
@@ -138,7 +140,7 @@ def calculo_da_vazao(Q, tipo):
 
 def custo_do_trocador(values, tipo, Q, U):
 
-    # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+    # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
 
     delta_1 = values[2] - values[5] # TEQ - TFS
     delta_2 = values[4] - values[3] # TSQ - TEF
@@ -150,7 +152,7 @@ def custo_do_trocador(values, tipo, Q, U):
         if delta_1 == delta_2: # Não podemos passar na fórmula abaixo pq gera uma indeterminação
             area = delta_1
         else:
-            area = Q / (U*(delta_1-delta_2)/math.log(delta_1/delta_2))
+            area = Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
 
     custo_do_trocador = 130 * (math.pow(area, (65/100)))
 
@@ -332,16 +334,22 @@ def combinations(matrix):
     min_combination = (index_min_ToQ,index_min_ToF)
     mix_1 = (index_min_ToQ,index_max_ToF)
     mix_2 = (index_max_ToQ,index_min_ToF)
-    
+    #print("Matrix: ", matrix)
+    #print("ToQ: ", ToQ)
+    #print("ToF: ", ToF)
+
     # Combinações válidas para Q1
     for i in range(len(ToQ)):
-        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]):
+        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+            print(matrix[2+i][1], matrix[2+i][2]) 
             possible_combinations.append((0,i))
 
     # Combinações válidas para Q2
     for i in range(len(ToQ)):
-        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]):
+        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((1,i))
+
+    #print(possible_combinations)
     
     QMTOxFMTO = max_combination if max_combination in possible_combinations else None
     QmTOxFmTO = min_combination if min_combination in possible_combinations else None
@@ -349,7 +357,7 @@ def combinations(matrix):
     mix_2 = mix_2 if mix_2 in possible_combinations else None
     
     combinations_ranked = QMTOxFMTO, QmTOxFmTO, mix_1, mix_2
-
+    
     """
     print("Combinações possíveis: ", possible_combinations)
     print("QMTOxFMTO:","Q", max_combination[0], "F", max_combination[1])
@@ -365,7 +373,8 @@ def combinations(matrix):
     
     return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
+
+def perform_RPS(matrix, Qx=0, Fx=0, delta_T_min=10, plot=False):
 
     comb = (0,0)
     count = 1
@@ -373,23 +382,29 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
     plot_single = [0,0,0,0,0,0,0,0]
 
     #while type != None:
-    while count<1000:
+    while count<10:
         if count == 1: 
             new_matrix = matrix
             print("Matriz original: ",count,"\n")
             l1, l2 = len(new_matrix), len(new_matrix[0])
             print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
+            last_comb = 0
 
         valid = combinations(new_matrix)
-
+        
         if all(v is None for v in valid): # Se não houver combinações válidas o loop para
             break
 
         comb = next(item for item in valid if item is not None) # Retorna a primeira combinação existente.
         
-        if Qx != None and Fx != None: # Caso o user passe uma combinação inicial
-            Q_x = Qx
-            F_x = Fx
+        if comb == last_comb:
+            break
+        
+        last_comb = comb
+
+        if Qx != None and Fx != None and count == 1: # Caso o user passe uma combinação inicial
+            Q_x = Qx+1
+            F_x = Fx+1
         elif (Qx != None and Fx == None) or (Qx == None and Fx != None):
             print("A função requer tanto Qx como Fx para funcionar, caso passe uma combinação inicial.")
         else: # Caso o user não passe uma combinação inicial -> QMTOxFMTO default

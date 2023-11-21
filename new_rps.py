@@ -59,7 +59,9 @@ TEF*=ToF  →o→ TSF=TdF
     demanda = WCp_F * (TSF_meta - TEF_fixado)
 
     # Q
-
+    #print("QMT0: ", QMT0)
+    #print("FMT0: ", FMT0)
+    #print("Oferta, demanda: ", oferta, demanda)
     Q = min(oferta, demanda)
 
     # Se Q = oferta, TSF = entrada fria + Q / WCp_F
@@ -103,16 +105,22 @@ def combinations(matrix):
     min_combination = (index_min_ToQ,index_min_ToF)
     mix_1 = (index_min_ToQ,index_max_ToF)
     mix_2 = (index_max_ToQ,index_min_ToF)
-    
+    #print("Matrix: ", matrix)
+    #print("ToQ: ", ToQ)
+    #print("ToF: ", ToF)
+
     # Combinações válidas para Q1
     for i in range(len(ToQ)):
-        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]):
+        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+            print(matrix[2+i][1], matrix[2+i][2]) 
             possible_combinations.append((0,i))
 
     # Combinações válidas para Q2
     for i in range(len(ToQ)):
-        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]):
+        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((1,i))
+
+    #print(possible_combinations)
     
     QMTOxFMTO = max_combination if max_combination in possible_combinations else None
     QmTOxFmTO = min_combination if min_combination in possible_combinations else None
@@ -120,7 +128,7 @@ def combinations(matrix):
     mix_2 = mix_2 if mix_2 in possible_combinations else None
     
     combinations_ranked = QMTOxFMTO, QmTOxFmTO, mix_1, mix_2
-
+    
     """
     print("Combinações possíveis: ", possible_combinations)
     print("QMTOxFMTO:","Q", max_combination[0], "F", max_combination[1])
@@ -144,23 +152,29 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
     plot_single = [0,0,0,0,0,0,0,0]
 
     #while type != None:
-    while count<1000:
+    while count<10:
         if count == 1: 
             new_matrix = matrix
             print("Matriz original: ",count,"\n")
             l1, l2 = len(new_matrix), len(new_matrix[0])
             print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
+            last_comb = 0
 
         valid = combinations(new_matrix)
-
+        
         if all(v is None for v in valid): # Se não houver combinações válidas o loop para
             break
 
         comb = next(item for item in valid if item is not None) # Retorna a primeira combinação existente.
         
-        if Qx != None and Fx != None: # Caso o user passe uma combinação inicial
-            Q_x = Qx
-            F_x = Fx
+        if comb == last_comb:
+            break
+        
+        last_comb = comb
+
+        if Qx != None and Fx != None and count == 1: # Caso o user passe uma combinação inicial
+            Q_x = Qx+1
+            F_x = Fx+1
         elif (Qx != None and Fx == None) or (Qx == None and Fx != None):
             print("A função requer tanto Qx como Fx para funcionar, caso passe uma combinação inicial.")
         else: # Caso o user não passe uma combinação inicial -> QMTOxFMTO default
@@ -194,6 +208,6 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
     if plot == True:
         return plot_multiple, new_matrix
 
-last_matrix = [[10.0, 111.5, 90.0], [2.0, 140.0, 140.0], [5.0, 143.0, 150.0], [7.0, 170.0, 220.0]]
+#last_matrix = [[10.0, 111.5, 90.0], [2.0, 140.0, 140.0], [5.0, 143.0, 150.0], [7.0, 170.0, 220.0]]
 
 plot_multiple, last_matrix = perform_RPS(matrix, plot=True)
