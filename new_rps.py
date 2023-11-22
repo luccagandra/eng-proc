@@ -144,7 +144,7 @@ def combinations(matrix):
     
     return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
+def perform_RPS(matrix, Qx=0, Fx=1, delta_T_min=10, plot=False):
 
     comb = (0,0)
     count = 1

@@ -123,9 +123,9 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         text2 = f"Cutil = {custo_util}"
         text3 = f"Ctotal = {custo_total}"
 
-        plt.text(x+2, 1, text1, ha='right', va='top', color='red', fontsize=10)
-        plt.text(x+2, 0.8, text2, ha='right', va='top', color='green', fontsize=10)
-        plt.text(x+2, 0.6, text3, ha='right', va='top', color='blue', fontsize=10)
+        plt.text(x, 1.2, text1, ha='right', va='top', color='red', fontsize=10)
+        plt.text(x, 1, text2, ha='right', va='top', color='green', fontsize=10)
+        plt.text(x, 0.8, text3, ha='right', va='top', color='blue', fontsize=10)
 
         #print(custo_cap, custo_util, custo_total)
         plt.show()
@@ -186,7 +186,58 @@ def plot_multiple_transfers(plot_list, last_matrix):
             plotted_out.append([values[4], 0,0, 'hot']) # TSQ, plotted at 0,0
             plotted_out.append([values[5], 0,0, 'cold']) # TSF, plotted at 0,0
 
-            plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
+            if len(plot_list)-1 == 0:
+                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
+
+                for a in range(len(plotted_out)): # Completando com utilidades
+                    
+                    if a+1 == len(plotted_out):
+                        single = True
+                    else:
+                        single = False  
+                    
+                    if plotted_out[a][3] == 'hot': # água de 30 a 50
+                        
+                        for k in range(len(last_matrix)):
+                            if last_matrix[k][1] == plotted_out[a][0]:
+                                meta = last_matrix[k][2]
+                                WCp_Q = last_matrix[k][0]
+
+                        values = [0,0,plotted_out[a][0],30,meta,50,WCp_Q,0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                        plot_single_transfer(plotted_out[a][1]+1, plotted_out[a][2], (a+i+2),values,'hot', single=single)
+
+                    if plotted_out[a][3] == 'cold': # vapor de 250 a 250
+
+                        for h in range(len(last_matrix)):
+                            if last_matrix[h][1] == plotted_out[a][0]:
+                                meta = last_matrix[h][2]
+                                WCp_F = last_matrix[h][0]
+
+                        values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+                        plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
+
+                # Quando uma troca n pode ser realizada na rede, ela é realizada individualmente.
+
+            plot_array = np.array(plot_list)
+
+            if not 1 in plot_array[:, [0]]: # Não tem Q1 na rede, a corrente deve ser resfriada
+                values = [0,0,last_matrix[0][1],30,last_matrix[0][2],50,last_matrix[0][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                plot_single_transfer(0, 0, 1,values,'hot', single=True)            
+
+            if not 2 in plot_array[:, [0]]: # Não tem Q2 na rede, a corrente deve ser resfriada
+                values = [0,0,last_matrix[1][1],30,last_matrix[1][2],50,last_matrix[1][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                plot_single_transfer(0, 0, 1,values,'hot', single=True)
+    
+            if not 1 in plot_array[:, [1]]: # Não tem F1 na rede, a corrente deve ser resfriada
+                values = [0,0,250,last_matrix[2][1],250,last_matrix[2][2],0,last_matrix[2][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                plot_single_transfer(0, 0, 1,values,'cold', single=True)
+
+            if not 2 in plot_array[:, [1]]: # Não tem F2 na rede, a corrente deve ser resfriada
+                values = [0,0,250,last_matrix[3][1],250,last_matrix[3][2],0,last_matrix[3][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                plot_single_transfer(0, 0, 1,values,'cold', single=True)
+
+            else:
+                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
             prev_value_x = 0
             prev_value_y = 0
             prev_values = values
@@ -341,7 +392,6 @@ def combinations(matrix):
     # Combinações válidas para Q1
     for i in range(len(ToQ)):
         if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
-            print(matrix[2+i][1], matrix[2+i][2]) 
             possible_combinations.append((0,i))
 
     # Combinações válidas para Q2
@@ -374,7 +424,7 @@ def combinations(matrix):
     return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
 
-def perform_RPS(matrix, Qx=0, Fx=0, delta_T_min=10, plot=False):
+def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
 
     comb = (0,0)
     count = 1
@@ -385,7 +435,7 @@ def perform_RPS(matrix, Qx=0, Fx=0, delta_T_min=10, plot=False):
     while count<10:
         if count == 1: 
             new_matrix = matrix
-            print("Matriz original: ",count,"\n")
+            print("\n","Matriz original: ",count,"\n")
             l1, l2 = len(new_matrix), len(new_matrix[0])
             print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
             last_comb = 0
@@ -417,7 +467,7 @@ def perform_RPS(matrix, Qx=0, Fx=0, delta_T_min=10, plot=False):
         new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min)
         
         print("------------------------------")
-        print("Número da troca: ",count,"\n")
+        print("\n","Número da troca: ",count,"\n")
         print("Q", comb[0]+1, "F", comb[1]+1,"\n", sep='')
 
         plot_single[4] = new_matrix[Q_x-1][1] # Saída quente -> TSQ_valor
@@ -588,34 +638,46 @@ def exibir_matriz(matriz):
         for j in range(3):
             print(matriz[i][j], end="\t")
 
+input_user = False
 
-# Cria a janela da GUI
-janela = tk.Tk()
-janela.title("Inserir Matriz 4x3")
+matriz =[[10.0, 180.0, 90.0], # WCp, Q1_T0, Q1_Td
+         [2.0, 250.0, 140.0], # WCp, Q2_T0, Q2_Td
+         [5.0, 60.0, 150.0],  # WCp, F1_T0, F1_Td
+         [7.0, 100.0, 220.0]] # WCp, F2_T0, F2_Td
 
-# Cria rótulos para as colunas
-coluna_legendas = ["WCp, KW/°C", "To, °C", "Td, °C"]
-for j in range(3):
-    coluna_legenda = tk.Label(janela, text=coluna_legendas[j])
-    coluna_legenda.grid(row=0, column=j + 1)
+if input_user == True:
+    # Cria a janela da GUI
+    janela = tk.Tk()
+    janela.title("Inserir Matriz 4x3")
 
-# Cria rótulos para as linhas e entradas para a matriz
-entrada_matriz = [[None] * 3 for _ in range(4)]
-linha_legendas = ["Q1", "Q2", "F1", "F2"]
-for i in range(4):
-    linha_legenda = tk.Label(janela, text=linha_legendas[i])
-    linha_legenda.grid(row=i + 1, column=0)
+    # Cria rótulos para as colunas
+    coluna_legendas = ["WCp, KW/°C", "To, °C", "Td, °C"]
     for j in range(3):
-        entrada_matriz[i][j] = tk.Entry(janela)
-        entrada_matriz[i][j].grid(row=i + 1, column=j + 1)
+        coluna_legenda = tk.Label(janela, text=coluna_legendas[j])
+        coluna_legenda.grid(row=0, column=j + 1)
 
-# Cria um botão para processar a matriz
-botao_processar = tk.Button(janela, text="Processar", command=obter_numeros)
-botao_processar.grid(row=5, columnspan=4)
+    # Cria rótulos para as linhas e entradas para a matriz
+    entrada_matriz = [[None] * 3 for _ in range(4)]
+    linha_legendas = ["Q1", "Q2", "F1", "F2"]
+    for i in range(4):
+        linha_legenda = tk.Label(janela, text=linha_legendas[i])
+        linha_legenda.grid(row=i + 1, column=0)
+        for j in range(3):
+            entrada_matriz[i][j] = tk.Entry(janela)
+            entrada_matriz[i][j].grid(row=i + 1, column=j + 1)
 
-# Inicializa a GUI
-janela.mainloop()
+    # Cria um botão para processar a matriz
+    botao_processar = tk.Button(janela, text="Processar", command=obter_numeros)
+    botao_processar.grid(row=5, columnspan=4)
 
-#offer_demand(matriz_2, intervals_2, 10)
+    # Inicializa a GUI
+    janela.mainloop()
 
-#RPS(matriz_2, 10)
+    #offer_demand(matriz_2, intervals_2, 10)
+
+    #RPS(matriz_2, 10)
+else:
+    plot_multiple, last_matrix =  perform_RPS(matriz, Qx=0, Fx=1, plot=True)
+    print(plot_multiple)
+    print(last_matrix)
+    plot_multiple_transfers(plot_multiple, last_matrix)
