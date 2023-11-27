@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import math
 
-def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, first=False):
+def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, first=False, remaining=False):
     """
     Plot a point in a 2D Cartesian space, display a straight line segment around it,
     plot a number slightly offset from the center, and add labels at the ends of the segments.
@@ -123,9 +123,14 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         text2 = f"Cutil = {custo_util}"
         text3 = f"Ctotal = {custo_total}"
 
-        plt.text(x, 1.2, text1, ha='right', va='top', color='red', fontsize=10)
-        plt.text(x, 1, text2, ha='right', va='top', color='green', fontsize=10)
-        plt.text(x, 0.8, text3, ha='right', va='top', color='blue', fontsize=10)
+        if remaining==False:
+            plt.text(x, 1.2, text1, ha='right', va='top', color='red', fontsize=10)
+            plt.text(x, 1, text2, ha='right', va='top', color='green', fontsize=10)
+            plt.text(x, 0.8, text3, ha='right', va='top', color='blue', fontsize=10)
+        else:
+            plt.text(-0.1, 0.3, text1, ha='right', va='top', color='red', fontsize=10)
+            plt.text(-0.1, 0.25, text2, ha='right', va='top', color='green', fontsize=10)
+            plt.text(-0.1, 0.2, text3, ha='right', va='top', color='blue', fontsize=10)            
 
         #print(custo_cap, custo_util, custo_total)
         plt.show()
@@ -187,6 +192,7 @@ def plot_multiple_transfers(plot_list, last_matrix):
             plotted_out.append([values[5], 0,0, 'cold']) # TSF, plotted at 0,0
 
             if len(plot_list)-1 == 0:
+                print("1")
                 plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
 
                 for a in range(len(plotted_out)): # Completando com utilidades
@@ -215,29 +221,31 @@ def plot_multiple_transfers(plot_list, last_matrix):
 
                         values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
                         plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
+            else:
+                print("2")
+                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
 
-                # Quando uma troca n pode ser realizada na rede, ela é realizada individualmente.
+            
+            # Quando uma troca n pode ser realizada na rede, ela é realizada individualmente.
 
             plot_array = np.array(plot_list)
 
             if not 1 in plot_array[:, [0]]: # Não tem Q1 na rede, a corrente deve ser resfriada
                 values = [0,0,last_matrix[0][1],30,last_matrix[0][2],50,last_matrix[0][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'hot', single=True)            
+                plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)            
 
             if not 2 in plot_array[:, [0]]: # Não tem Q2 na rede, a corrente deve ser resfriada
                 values = [0,0,last_matrix[1][1],30,last_matrix[1][2],50,last_matrix[1][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'hot', single=True)
+                plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)
     
             if not 1 in plot_array[:, [1]]: # Não tem F1 na rede, a corrente deve ser resfriada
                 values = [0,0,250,last_matrix[2][1],250,last_matrix[2][2],0,last_matrix[2][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'cold', single=True)
+                plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
 
             if not 2 in plot_array[:, [1]]: # Não tem F2 na rede, a corrente deve ser resfriada
                 values = [0,0,250,last_matrix[3][1],250,last_matrix[3][2],0,last_matrix[3][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'cold', single=True)
+                plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
 
-            else:
-                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
             prev_value_x = 0
             prev_value_y = 0
             prev_values = values
@@ -260,7 +268,9 @@ def plot_multiple_transfers(plot_list, last_matrix):
             if i == len(plot_list)-1: # Última iteração
                 plotted_out.append([values[4], x,y, 'hot']) 
                 plotted_out.append([values[5], x,y, 'cold']) 
-
+                #print(values) # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                print("3")
+                
                 plot_single_transfer(x,y,(i+1),values,'reta', single=False) # Terão elementos livres!
 
                 #print(plotted_out)
@@ -300,10 +310,11 @@ def plot_multiple_transfers(plot_list, last_matrix):
             else:
                 plotted_out.append([values[4], x,y, 'hot']) 
                 plotted_out.append([values[5], x,y, 'cold']) 
+                print("4")
                 plot_single_transfer(x,y,(i+1),values,'reta', single=False)
             
 
-def perform_transform(matrix, Qx, Fx, delta_T_min):
+def perform_transform(matrix, Qx, Fx, delta_T_min, i):
 
     QMT0 = matrix[Qx-1].copy()
     FMT0 = matrix[Fx+1].copy()
@@ -335,16 +346,19 @@ TEF*=ToF  →o→ TSF=TdF
     # Se saída quente - entrada fria é menor que ΔT(min)
     if TSQ_meta - TEF_fixado < delta_T_min:
         TSQ_meta = TEF_fixado + 10
-    
+
+    #print("1", QMT0[0], QMT0[1], QMT0[2])
+    #print("1",WCp_Q, TEQ_fixado, TSQ_meta)
     # Cálculo da Oferta e Demanda
     oferta =  WCp_Q * (TEQ_fixado - TSQ_meta)
+    #print(oferta)
+    #print("2",WCp_Q, TEQ_fixado, TSQ_meta)
     demanda = WCp_F * (TSF_meta - TEF_fixado)
 
     # Q
 
     Q = min(oferta, demanda)
 
-    # Se Q = oferta, TSF = entrada fria + Q / WCp_F
     if Q == oferta:
         TSQ_meta = TSQ_meta # Temperatura de saída quente confirmada
         TSF_meta = TEF_fixado + round(Q/WCp_F,1) 
@@ -365,7 +379,7 @@ TEF*=ToF  →o→ TSF=TdF
 
     return new_matrix
 
-def combinations(matrix):
+def combinations(matrix, tipo):
     # Temperaturas de entrada das corrents quentes 
     # ToQ[0] = Q1, ToQ[1] = Q2
     ToQ = (matrix[0][1], matrix[1][1])
@@ -391,23 +405,31 @@ def combinations(matrix):
 
     # Combinações válidas para Q1
     for i in range(len(ToQ)):
-        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+        if (ToQ[0] > ToF[i]+10) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((0,i))
 
     # Combinações válidas para Q2
     for i in range(len(ToQ)):
-        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+        if (ToQ[1] > ToF[i]+10) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((1,i))
 
-    #print(possible_combinations)
-    
     QMTOxFMTO = max_combination if max_combination in possible_combinations else None
     QmTOxFmTO = min_combination if min_combination in possible_combinations else None
-    mix_1 = mix_1 if mix_1 in possible_combinations else None
-    mix_2 = mix_2 if mix_2 in possible_combinations else None
+    QmTOxFMTO = mix_1 if mix_1 in possible_combinations else None
+    QMTOxFmTO = mix_2 if mix_2 in possible_combinations else None
     
-    combinations_ranked = QMTOxFMTO, QmTOxFmTO, mix_1, mix_2
-    
+    if tipo == 'QMTOxFMTO':
+        combinations_ranked = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
+
+    if tipo == 'QmTOxFmTO':
+        combinations_ranked = QmTOxFmTO, QMTOxFMTO, QmTOxFMTO, QMTOxFmTO
+
+    if tipo == 'QmTOxFMTO':
+        combinations_ranked = QmTOxFMTO, QmTOxFmTO, QMTOxFMTO, QMTOxFmTO
+
+    if tipo == 'QMTOxFmTO':
+        combinations_ranked = QMTOxFmTO, QmTOxFmTO, QMTOxFMTO, QmTOxFMTO
+
     """
     print("Combinações possíveis: ", possible_combinations)
     print("QMTOxFMTO:","Q", max_combination[0], "F", max_combination[1])
@@ -424,8 +446,7 @@ def combinations(matrix):
     return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
 
-def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
-
+def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot=False):
     comb = (0,0)
     count = 1
     plot_multiple = []
@@ -440,13 +461,13 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
             print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
             last_comb = 0
 
-        valid = combinations(new_matrix)
-        
+        valid = combinations(new_matrix, tipo=tipo) # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
+
         if all(v is None for v in valid): # Se não houver combinações válidas o loop para
             break
 
         comb = next(item for item in valid if item is not None) # Retorna a primeira combinação existente.
-        
+
         if comb == last_comb:
             break
         
@@ -463,9 +484,9 @@ def perform_RPS(matrix, Qx=None, Fx=None, delta_T_min=10, plot=False):
 
         # Qx, Fx, Qx_valor, Fx_valor
         plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0,0,0] # Sabemos as entradas, mas ainda não as saídas
-    
-        new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min)
-        
+
+        new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min, count)
+
         print("------------------------------")
         print("\n","Número da troca: ",count,"\n")
         print("Q", comb[0]+1, "F", comb[1]+1,"\n", sep='')
@@ -676,8 +697,10 @@ if input_user == True:
     #offer_demand(matriz_2, intervals_2, 10)
 
     #RPS(matriz_2, 10)
+
 else:
-    plot_multiple, last_matrix =  perform_RPS(matriz, Qx=0, Fx=1, plot=True)
-    print(plot_multiple)
-    print(last_matrix)
+    # tipo = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
+
+    plot_multiple, last_matrix =  perform_RPS(matriz, Qx=0, Fx=1,tipo='QMTOxFMTO', plot=True)
+
     plot_multiple_transfers(plot_multiple, last_matrix)
