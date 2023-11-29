@@ -40,6 +40,8 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
         plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
 
+        print(x,y)
+
         if values[2] == None:
             text_hot = ""
         else:
@@ -171,7 +173,7 @@ def custo_utilidades(consumo, tipo):
 
     return 8500*(custo_unitario*consumo)
 
-def plot_multiple_transfers(plot_list, last_matrix):
+def plot_multiple_transfers(plot_list, last_matrix, is_there_two_chains):
     # Plotting the point
     plt.scatter(1, 1, color='red', label='Point')
 
@@ -186,13 +188,13 @@ def plot_multiple_transfers(plot_list, last_matrix):
     for i in range(len(plot_list)):
 
         values = plot_list[i]
-
+        #print("len", len(plot_list))
         if i == 0:
             plotted_out.append([values[4], 0,0, 'hot']) # TSQ, plotted at 0,0
             plotted_out.append([values[5], 0,0, 'cold']) # TSF, plotted at 0,0
 
             if len(plot_list)-1 == 0:
-                print("1")
+                #print("1")
                 plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
 
                 for a in range(len(plotted_out)): # Completando com utilidades
@@ -222,7 +224,7 @@ def plot_multiple_transfers(plot_list, last_matrix):
                         values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
                         plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
             else:
-                print("2")
+                #print("2")
                 plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
 
             
@@ -230,25 +232,27 @@ def plot_multiple_transfers(plot_list, last_matrix):
 
             plot_array = np.array(plot_list)
 
-            if not 1 in plot_array[:, [0]]: # Não tem Q1 na rede, a corrente deve ser resfriada
-                values = [0,0,last_matrix[0][1],30,last_matrix[0][2],50,last_matrix[0][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)            
+            if is_there_two_chains == False:
+                if not 1 in plot_array[:, [0]]: # Não tem Q1 na rede, a corrente deve ser resfriada
+                    values = [0,0,last_matrix[0][1],30,last_matrix[0][2],50,last_matrix[0][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                    plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)            
 
-            if not 2 in plot_array[:, [0]]: # Não tem Q2 na rede, a corrente deve ser resfriada
-                values = [0,0,last_matrix[1][1],30,last_matrix[1][2],50,last_matrix[1][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)
-    
-            if not 1 in plot_array[:, [1]]: # Não tem F1 na rede, a corrente deve ser resfriada
-                values = [0,0,250,last_matrix[2][1],250,last_matrix[2][2],0,last_matrix[2][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
+                if not 2 in plot_array[:, [0]]: # Não tem Q2 na rede, a corrente deve ser resfriada
+                    values = [0,0,last_matrix[1][1],30,last_matrix[1][2],50,last_matrix[1][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                    plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)
+        
+                if not 1 in plot_array[:, [1]]: # Não tem F1 na rede, a corrente deve ser resfriada
+                    values = [0,0,250,last_matrix[2][1],250,last_matrix[2][2],0,last_matrix[2][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                    plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
 
-            if not 2 in plot_array[:, [1]]: # Não tem F2 na rede, a corrente deve ser resfriada
-                values = [0,0,250,last_matrix[3][1],250,last_matrix[3][2],0,last_matrix[3][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
+                if not 2 in plot_array[:, [1]]: # Não tem F2 na rede, a corrente deve ser resfriada
+                    values = [0,0,250,last_matrix[3][1],250,last_matrix[3][2],0,last_matrix[3][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
+                    plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
 
             prev_value_x = 0
             prev_value_y = 0
             prev_values = values
+
 
         else:
             if values[3] == prev_values[5]: # Conexão por corrente fria
@@ -260,16 +264,16 @@ def plot_multiple_transfers(plot_list, last_matrix):
                 x = prev_value_x + 1
                 y = prev_value_y
                 values_to_clear.append(values[2])
-
+            
             prev_value_x = x
             prev_value_y = y
             prev_values = values
-
+ 
             if i == len(plot_list)-1: # Última iteração
                 plotted_out.append([values[4], x,y, 'hot']) 
                 plotted_out.append([values[5], x,y, 'cold']) 
                 #print(values) # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                print("3")
+                #print("3")
                 
                 plot_single_transfer(x,y,(i+1),values,'reta', single=False) # Terão elementos livres!
 
@@ -310,9 +314,8 @@ def plot_multiple_transfers(plot_list, last_matrix):
             else:
                 plotted_out.append([values[4], x,y, 'hot']) 
                 plotted_out.append([values[5], x,y, 'cold']) 
-                print("4")
+                #print("4")
                 plot_single_transfer(x,y,(i+1),values,'reta', single=False)
-            
 
 def perform_transform(matrix, Qx, Fx, delta_T_min, i):
 
@@ -450,8 +453,11 @@ def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot
     comb = (0,0)
     count = 1
     plot_multiple = []
+    plot_multiple_chains = []
     plot_single = [0,0,0,0,0,0,0,0]
-
+    prev_Q_x = 0
+    prev_F_x = 0
+    is_there_two_chains = False
     #while type != None:
     while count<10:
         if count == 1: 
@@ -484,12 +490,12 @@ def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot
 
         # Qx, Fx, Qx_valor, Fx_valor
         plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0,0,0] # Sabemos as entradas, mas ainda não as saídas
-
+        
         new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min, count)
 
         print("------------------------------")
         print("\n","Número da troca: ",count,"\n")
-        print("Q", comb[0]+1, "F", comb[1]+1,"\n", sep='')
+        print("Q", Q_x, "F", F_x,"\n", sep='')
 
         plot_single[4] = new_matrix[Q_x-1][1] # Saída quente -> TSQ_valor
         plot_single[5] = new_matrix[F_x+1][1] # Saída fria -> TSF_valor
@@ -501,13 +507,21 @@ def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot
         #print(plot_single)
         #print("Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor")
         print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
+        #print(plot_single)
 
-        plot_multiple.append(plot_single)
+        if Q_x != prev_Q_x and F_x != prev_F_x and count!= 1:
+            plot_multiple_chains.append(plot_single)
+            is_there_two_chains = True
+        else:
+            plot_multiple.append(plot_single)
+
+        prev_Q_x = Q_x
+        prev_F_x = F_x
 
         count+=1
     
     if plot == True:
-        return plot_multiple, new_matrix
+        return plot_multiple,plot_multiple_chains, new_matrix, is_there_two_chains
 
 def display_table(data):
     root = tk.Tk()
@@ -701,6 +715,9 @@ if input_user == True:
 else:
     # tipo = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-    plot_multiple, last_matrix =  perform_RPS(matriz, Qx=0, Fx=1,tipo='QMTOxFMTO', plot=True)
+    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=1, Fx=1,tipo='QMTOxFmTO', plot=True)
 
-    plot_multiple_transfers(plot_multiple, last_matrix)
+    plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
+
+    if plot_multiple_chains != []:
+        plot_multiple_transfers(plot_multiple_chains, last_matrix,is_there_two_chains)
