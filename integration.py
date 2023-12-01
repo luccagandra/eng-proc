@@ -68,7 +68,7 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
 
         U = 0.75
 
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
 
     elif type == 'hot': # Usando água (resfriador)
         plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='blue')
@@ -79,10 +79,10 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         plt.text(x + segment_length/2, y + offset, values[4], color='red', ha='left', va='center', fontsize=10)
 
         Q =  values[6] * (values[2] - values[4])
-
+        
         U = 0.75
 
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
 
         # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
 
@@ -98,9 +98,10 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         plt.text(x + offset, y - segment_length/2, values[5], color='blue', ha='center', va='top', fontsize=10)
 
         Q = values[7] * (values[5] - values[3])
+        #print("Q: ",Q)
         U = 1
 
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U)
+        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
 
         # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
 
@@ -145,12 +146,24 @@ def calculo_da_vazao(Q, tipo):
 
     return W
 
-def custo_do_trocador(values, tipo, Q, U):
+def custo_do_trocador(values, tipo, Q, U, delta_T_min):
 
     # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-
+    #print("values", values)
+    #print("delta_1", values[2], values[5])
+    #print("delta_2", values[4], values[3])
     delta_1 = values[2] - values[5] # TEQ - TFS
     delta_2 = values[4] - values[3] # TSQ - TEF
+
+    print("TEQ:",values[2],"TSQ:",values[4],"TEF:",values[3],"TSF:",values[5])
+
+    # Se entrada quente - saída fria é menor que ΔT(min)
+    if delta_1 < delta_T_min:
+        delta_1 += 10
+
+    # Se saída quente - entrada fria é menor que ΔT(min)
+    if delta_2 < delta_T_min:
+        delta_2 += 10
 
     if tipo == 'aritmético':
         area = Q / (U*(delta_1+delta_2)/2)
@@ -160,7 +173,6 @@ def custo_do_trocador(values, tipo, Q, U):
             area = delta_1
         else:
             area = Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
-
     custo_do_trocador = 130 * (math.pow(area, (65/100)))
 
     return custo_do_trocador
@@ -396,42 +408,39 @@ def combinations(matrix, tipo):
     index_max_ToF = np.argmax(ToF)
     index_min_ToF = np.argmin(ToF)
 
-    possible_combinations = []
-    
     max_combination = (index_max_ToQ,index_max_ToF)
     min_combination = (index_min_ToQ,index_min_ToF)
     mix_1 = (index_min_ToQ,index_max_ToF)
     mix_2 = (index_max_ToQ,index_min_ToF)
-    #print("Matrix: ", matrix)
-    #print("ToQ: ", ToQ)
-    #print("ToF: ", ToF)
+
+    possible_combinations = []
 
     # Combinações válidas para Q1
-    for i in range(len(ToQ)):
-        if (ToQ[0] > ToF[i]+10) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+    for i in range(len(ToQ)): #(ToQ[0] > ToF[i]+10)
+        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((0,i))
 
     # Combinações válidas para Q2
-    for i in range(len(ToQ)):
-        if (ToQ[1] > ToF[i]+10) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
+    for i in range(len(ToQ)): #(ToQ[1] > ToF[i]+10)
+        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
             possible_combinations.append((1,i))
-
+        
     QMTOxFMTO = max_combination if max_combination in possible_combinations else None
     QmTOxFmTO = min_combination if min_combination in possible_combinations else None
     QmTOxFMTO = mix_1 if mix_1 in possible_combinations else None
     QMTOxFmTO = mix_2 if mix_2 in possible_combinations else None
-    
+
     if tipo == 'QMTOxFMTO':
-        combinations_ranked = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
+        combinations_ranked = QMTOxFMTO, QMTOxFmTO,QmTOxFMTO, QmTOxFmTO,
 
     if tipo == 'QmTOxFmTO':
-        combinations_ranked = QmTOxFmTO, QMTOxFMTO, QmTOxFMTO, QMTOxFmTO
+        combinations_ranked = QmTOxFmTO, QmTOxFMTO, QMTOxFmTO, QMTOxFMTO
 
     if tipo == 'QmTOxFMTO':
-        combinations_ranked = QmTOxFMTO, QmTOxFmTO, QMTOxFMTO, QMTOxFmTO
+        combinations_ranked = QmTOxFMTO, QmTOxFmTO, QMTOxFmTO, QMTOxFMTO
 
     if tipo == 'QMTOxFmTO':
-        combinations_ranked = QMTOxFmTO, QmTOxFmTO, QMTOxFMTO, QmTOxFMTO
+        combinations_ranked = QMTOxFmTO, QMTOxFMTO, QmTOxFMTO, QmTOxFmTO
 
     """
     print("Combinações possíveis: ", possible_combinations)
@@ -468,12 +477,12 @@ def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot
             last_comb = 0
 
         valid = combinations(new_matrix, tipo=tipo) # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
-
+        
         if all(v is None for v in valid): # Se não houver combinações válidas o loop para
             break
 
         comb = next(item for item in valid if item is not None) # Retorna a primeira combinação existente.
-
+        
         if comb == last_comb:
             break
         
@@ -664,9 +673,12 @@ def obter_numeros():
     criar_grafico(matriz)
     
     # Chamar RPS
-    plot_multiple, last_matrix =  perform_RPS(matriz, plot=True)
+    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, plot=True)
 
-    plot_multiple_transfers(plot_multiple, last_matrix)
+    plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
+
+    if plot_multiple_chains != []:
+        plot_multiple_transfers(plot_multiple_chains, last_matrix,is_there_two_chains)
 
 def exibir_matriz(matriz):
     for i in range(4):
@@ -679,6 +691,11 @@ matriz =[[10.0, 180.0, 90.0], # WCp, Q1_T0, Q1_Td
          [2.0, 250.0, 140.0], # WCp, Q2_T0, Q2_Td
          [5.0, 60.0, 150.0],  # WCp, F1_T0, F1_Td
          [7.0, 100.0, 220.0]] # WCp, F2_T0, F2_Td
+
+matriz_aula = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
+               [1.5, 150.0, 30.0], # WCp, Q2_T0, Q2_Td
+               [2.0, 30.0, 140.0],  # WCp, F1_T0, F1_Td
+               [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
 
 if input_user == True:
     # Cria a janela da GUI
@@ -715,7 +732,7 @@ if input_user == True:
 else:
     # tipo = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=1, Fx=1,tipo='QMTOxFmTO', plot=True)
+    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=None, Fx=None,tipo='QMTOxFMTO', plot=True)
 
     plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
 
