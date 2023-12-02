@@ -8,8 +8,9 @@ import numpy as np
 import math
 
 class IntegraçãoEnergética:
-    def __init__(self, matrix, delta_T_min, Qx=None, Fx=None):
+    def __init__(self, matrix, delta_T_min, Qx=None, Fx=None, user_input=False):
         self.matrix = matrix
+        self.user_input = user_input
         self.Qx_init = Qx
         self.Fx_init = Fx
         self.prev_matrix = [[0.0, 0.0, 0.0],
@@ -168,6 +169,27 @@ class IntegraçãoEnergética:
 
         return comb 
 
+    def valid_combinations(self):
+        ToQ = (self.matrix[0][1], self.matrix[1][1])
+
+        # Temperaturas de entrada das corrents frias
+        # ToF[0] = F1, ToF[1] = F2   
+        ToF = (self.matrix[2][1], self.matrix[3][1])
+
+        possible_combinations = []
+
+        # Combinações válidas para Q1
+        for i in range(len(ToQ)): #(ToQ[0] > ToF[i]+10)
+            if (ToQ[0] > ToF[i]) and (self.matrix[0][1] != self.matrix[0][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append([0,i])
+
+        # Combinações válidas para Q2
+        for i in range(len(ToQ)): #(ToQ[1] > ToF[i]+10)
+            if (ToQ[1] > ToF[i]) and (self.matrix[1][1] != self.matrix[1][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append([1,i])
+        
+        return possible_combinations
+
     def atualizar_matrix(self, matrix):
         self.matrix = matrix
 
@@ -176,21 +198,38 @@ class IntegraçãoEnergética:
 
     def loop_RPS(self, tipo):
         while True:
-            if self.iterations == 0 and self.Qx_init != None and self.Fx_init != None:
-                comb = (self.Qx_init, self.Fx_init)
-            else:    
-                comb = self.next_combination(tipo)
+            if self.user_input == False:
+                if self.iterations == 0 and self.Qx_init != None and self.Fx_init != None:
+                    comb = (self.Qx_init, self.Fx_init)
+                else:    
+                    comb = self.next_combination(tipo)
 
-            if comb == None: # Primeira condição de quebra -> Deve haver combinações possíveis
-                break
+                if comb == None: # Primeira condição de quebra -> Deve haver combinações possíveis
+                    break
 
-            if comb[0] != self.last_comb[0] and comb[1] != self.last_comb[1] and self.iterations != 0:
-                self.is_there_two_chains = True
-                self.chains_not_in_the_loop = (comb[0],comb[1])
-                break
+                if comb[0] != self.last_comb[0] and comb[1] != self.last_comb[1] and self.iterations != 0:
+                    self.is_there_two_chains = True
+                    self.chains_not_in_the_loop = (comb[0],comb[1])
+                    break
 
-            if comb in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
-                break
+                if comb in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
+                    break
+
+            else:
+                valid = self.valid_combinations()
+
+                are_all_none = all(item is None for item in valid)
+
+                if are_all_none:
+                    print("Não há mais combinações possíveis")
+                    break
+                else:
+                    for i in range(len(valid)):
+                        print(f"Combinação válida: Q{valid[i][0]+1}xF{valid[i][1]+1}")
+
+                    comb = [0,0]
+                    comb[0] = int(input("Escolha a corrente quente: Q")) -1
+                    comb[1] = int(input("Escolha a corrente fria: F")) -1
             
             self.used[comb[0]] = True
             self.used[comb[1]+2] = True
@@ -477,10 +516,11 @@ matriz_aula = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
                [2.0, 30.0, 140.0],  # WCp, F1_T0, F1_Td
                [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
 
-matriz_escolhida = matriz_aula
+matriz_escolhida = matrix
+user_input = True
 
 delta_T_min = 10
-loop = IntegraçãoEnergética(matriz_escolhida, delta_T_min)
+loop = IntegraçãoEnergética(matriz_escolhida, delta_T_min, Qx=None, Fx=None, user_input=user_input) #Qx=0 e Fx=1 dão erro
 
 print("\n","Matriz original: \n")
 print(pd.DataFrame(matriz_escolhida, index=['']*len(matrix), columns=['']*len(matrix[0])),"\n")
@@ -496,8 +536,8 @@ if loop.is_there_two_chains == True:
 
     print(f"A combinação fora do loop é: Q{loop.chains_not_in_the_loop[0]+1}xF{loop.chains_not_in_the_loop[1]+1}")
     matriz_loop2 = loop.matrix
-    loop2 = IntegraçãoEnergética(matriz_loop2, delta_T_min, Qx=loop.chains_not_in_the_loop[0], Fx=loop.chains_not_in_the_loop[1])
-    loop2.loop_RPS("QMTOxFMTO")
+    loop2 = IntegraçãoEnergética(matriz_loop2, delta_T_min, Qx=loop.chains_not_in_the_loop[0], Fx=loop.chains_not_in_the_loop[1], user_input=user_input)
+    loop2.loop_RPS("QmTOxFmTO")
     loop2.completando_utilidades()
     loop2.plot_multiple()
 
