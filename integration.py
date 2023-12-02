@@ -40,9 +40,7 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
         plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
 
-        print(x,y)
-
-        if values[2] == None:
+        if values[2] == None: # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
             text_hot = ""
         else:
             text_hot = f'Q{values[0]} = {values[2]}'
@@ -67,8 +65,9 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         Q = min(oferta, demanda)
 
         U = 0.75
-
+        print("\n TROCADOR",values)
         custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
+        print(custo_cap)
 
     elif type == 'hot': # Usando água (resfriador)
         plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='blue')
@@ -82,7 +81,10 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         
         U = 0.75
 
+        print("\n RESFRIADOR",values)
         custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
+        print(custo_cap)
+        
 
         # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
 
@@ -100,8 +102,9 @@ def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, fir
         Q = values[7] * (values[5] - values[3])
         #print("Q: ",Q)
         U = 1
-
+        print("\n AQUECEDOR")
         custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
+        print(custo_cap)
 
         # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
 
@@ -146,6 +149,14 @@ def calculo_da_vazao(Q, tipo):
 
     return W
 
+def custo_utilidades(consumo, tipo):
+    if tipo == 'água':
+        custo_unitario = 0.00005 # $/kg
+    if tipo == 'vapor':
+        custo_unitario = 0.0015 # $/kg
+
+    return 8500*(custo_unitario*consumo)
+
 def custo_do_trocador(values, tipo, Q, U, delta_T_min):
 
     # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
@@ -176,14 +187,6 @@ def custo_do_trocador(values, tipo, Q, U, delta_T_min):
     custo_do_trocador = 130 * (math.pow(area, (65/100)))
 
     return custo_do_trocador
-
-def custo_utilidades(consumo, tipo):
-    if tipo == 'água':
-        custo_unitario = 0.00005 # $/kg
-    if tipo == 'vapor':
-        custo_unitario = 0.0015 # $/kg
-
-    return 8500*(custo_unitario*consumo)
 
 def plot_multiple_transfers(plot_list, last_matrix, is_there_two_chains):
     # Plotting the point
@@ -732,7 +735,7 @@ if input_user == True:
 else:
     # tipo = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=None, Fx=None,tipo='QMTOxFMTO', plot=True)
+    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=None, Fx=None,tipo='QMTOxFmTO', plot=True)
 
     plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
 
