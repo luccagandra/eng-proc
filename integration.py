@@ -7,690 +7,631 @@ import pandas as pd
 import numpy as np
 import math
 
-def plot_single_transfer(x, y, number, values,type, offset=0.1, single=True, first=False, remaining=False):
-    """
-    Plot a point in a 2D Cartesian space, display a straight line segment around it,
-    plot a number slightly offset from the center, and add labels at the ends of the segments.
+class IntegraçãoEnergética:
+    def __init__(self, matrix, delta_T_min, Qx=None, Fx=None, user_input=False):
+        self.matrix = matrix
+        self.user_input = user_input
+        self.Qx_init = Qx
+        self.Fx_init = Fx
+        self.prev_matrix = [[0.0, 0.0, 0.0],
+                            [0.0, 0.0, 0.0],
+                            [0.0, 0.0, 0.0], 
+                            [0.0, 0.0, 0.0]]
+        self.delta_T_min = delta_T_min
+        self.custo_cap = 0
+        self.custo_util = 0
+        self.Q = 0
+        self.last_comb = (-10,-10)
+        self.is_there_two_chains = False
+        self.chains_not_in_the_loop = (-1,-1)
+        self.temp_vapor = (250,250) # T_in, T_out
+        self.temp_agua = (30,50) # T_in, T_out
+        self.plot = []
+        self.iterations = 0
+        self.custo_unit_agua = 0.00005
+        self.custo_unit_vapor = 0.0015
+        self.coordinates = [0,0]
+        self.F_coords= [[0,0],
+                        [0,0]]
+        self.Q_coords = [[0,0],
+                        [0,0]]
+        self.comb_history = []
+        self.used = [0,0,0,0]
+        self.intervals = []
 
-    Parameters:
-    - x: x-coordinate of the point
-    - y: y-coordinate of the point
-    - number: The number to be plotted slightly offset from the center
-    - offset_x: Offset in the x-direction for the number (default is 0.1)
-    - offset_y: Offset in the y-direction for the number (default is 0.1)
-    - values: Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-    """
-
-    global custo_cap
-    global custo_util
-    global custo_total
-
-    if first==True:
-        custo_cap = 0
-        custo_util = 0
-        custo_total = 0
-
-    # Plotting the point
-    plt.scatter(x, y, color='black', label='Point')
-
-    # Displaying a straight line segment around the point
-    segment_length = 1  # Length of the segment in both x and y directions
-
-    if type == 'reta': # Usando trocador de integração
-        plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
-        plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
-
-        if values[2] == None: # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-            text_hot = ""
-        else:
-            text_hot = f'Q{values[0]} = {values[2]}'
-
-        if values[3] == None:
-            text_cold = ""
-        else:
-            text_cold = f'F{values[1]} = {values[3]}'
-
-        # Adding labels 
-        plt.text(x - segment_length/2, y + offset, text_hot, color='red', ha='right', va='center', fontsize=10)
-        plt.text(x + offset, y + segment_length/2, text_cold, color='blue', ha='center', va='bottom', fontsize=10)
-
-        plt.text(x + segment_length/2, y + offset, f'{values[4]}', color='red', ha='left', va='center', fontsize=10)
-        plt.text(x + offset, y - segment_length/2, f'{values[5]}', color='blue', ha='center', va='top', fontsize=10)
-
-        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, WCp_Q, WCp_F
-        # Cálculo da Oferta e Demanda
-        oferta =  values[6] * (values[2] - values[4])
-        demanda = values[7] * (values[5] - values[3])
-
-        Q = min(oferta, demanda)
-
-        U = 0.75
-        print("\n TROCADOR",values)
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
-        print(custo_cap)
-
-    elif type == 'hot': # Usando água (resfriador)
-        plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='blue')
-        plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
+    def perform_transform(self, Qx, Fx):
         
-        plt.text(x - segment_length/4 - offset, y - segment_length/4 - offset, values[5], color='blue', ha='left', va='center', fontsize=10)
-        plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, values[3], color='blue', ha='right', va='center', fontsize=10)
-        plt.text(x + segment_length/2, y + offset, values[4], color='red', ha='left', va='center', fontsize=10)
+        self.atualizar_prev_matrix(self.matrix)
 
-        Q =  values[6] * (values[2] - values[4])
+        QMT0 = self.matrix[Qx-1].copy()
+        FMT0 = self.matrix[Fx+1].copy()
+
+        """
+            TEQ*=ToQ
+            ↓
+    TEF*=ToF  →o→ TSF=TdF
+            ↓
+            TSQ=TdQ
+        """
+
+        # WCp
+        WCp_Q = QMT0[0]
+        WCp_F = FMT0[0]
+
+        # Temperaturas de entrada
+        TEQ_fixado = QMT0[1] # TEQ* = ToQ
+        TEF_fixado = FMT0[1] # TEF* = ToF
+
+        # Temperaturas de saída
+        TSQ_meta = QMT0[2] # TSQ = TdQ
+        TSF_meta = FMT0[2] # TSF = TdF
+
+        # Se entrada quente - saída fria é menor que ΔT(min)
+        if TEQ_fixado - TSF_meta < self.delta_T_min:
+            TSF_meta = TEQ_fixado - 10
+
+        # Se saída quente - entrada fria é menor que ΔT(min)
+        if TSQ_meta - TEF_fixado < self.delta_T_min:
+            TSQ_meta = TEF_fixado + 10
+
+        oferta =  WCp_Q * (TEQ_fixado - TSQ_meta)
+        demanda = WCp_F * (TSF_meta - TEF_fixado)
+
+        # Q
+
+        self.Q = min(oferta, demanda)
+
+        if self.Q == oferta:
+            TSQ_meta = TSQ_meta # Temperatura de saída quente confirmada
+            TSF_meta = TEF_fixado + round(self.Q/WCp_F,1) 
         
-        U = 0.75
+        # Se Q = demanda, TSQ = entrada quente - Q / WCp_F
+        if self.Q == demanda:
+            TSF_meta = TSF_meta
+            TSQ_meta = TEQ_fixado - round(self.Q/WCp_Q,1) 
 
-        print("\n RESFRIADOR",values)
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
-        print(custo_cap)
+        # TSF_meta e TSQ_meta são atualizados
+        QMT0[1] = TSQ_meta
+        FMT0[1] = TSF_meta
+
+        new_matrix = self.matrix.copy()
+
+        new_matrix[Qx-1] = QMT0
+        new_matrix[Fx+1] = FMT0
+
+        self.atualizar_matrix(matrix)
+
+        return new_matrix
+
+    def next_combination(self, tipo):
+        # Temperaturas de entrada das corrents quentes 
+        # ToQ[0] = Q1, ToQ[1] = Q2
+        ToQ = (self.matrix[0][1], self.matrix[1][1])
+
+        # Temperaturas de entrada das corrents frias
+        # ToF[0] = F1, ToF[1] = F2   
+        ToF = (self.matrix[2][1], self.matrix[3][1])
+
+        index_max_ToQ = np.argmax(ToQ)
+        index_min_ToQ = np.argmin(ToQ)
+        index_max_ToF = np.argmax(ToF)
+        index_min_ToF = np.argmin(ToF)
+
+        max_combination = (index_max_ToQ,index_max_ToF)
+        min_combination = (index_min_ToQ,index_min_ToF)
+        mix_1 = (index_min_ToQ,index_max_ToF)
+        mix_2 = (index_max_ToQ,index_min_ToF)
+
+        possible_combinations = []
+
+        # Combinações válidas para Q1
+        for i in range(len(ToQ)): #(ToQ[0] > ToF[i]+10)
+            if (ToQ[0] > ToF[i]) and (self.matrix[0][1] != self.matrix[0][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append((0,i))
+
+        # Combinações válidas para Q2
+        for i in range(len(ToQ)): #(ToQ[1] > ToF[i]+10)
+            if (ToQ[1] > ToF[i]) and (self.matrix[1][1] != self.matrix[1][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append((1,i))
+
+        QMTOxFMTO = max_combination if max_combination in possible_combinations else None
+        QmTOxFmTO = min_combination if min_combination in possible_combinations else None
+        QmTOxFMTO = mix_1 if mix_1 in possible_combinations else None
+        QMTOxFmTO = mix_2 if mix_2 in possible_combinations else None
+
+        if tipo == 'QMTOxFMTO':
+            combinations_ranked = QMTOxFMTO, QMTOxFmTO,QmTOxFMTO, QmTOxFmTO,
+
+        if tipo == 'QmTOxFmTO':
+            combinations_ranked = QmTOxFmTO, QmTOxFMTO, QMTOxFmTO, QMTOxFMTO
+
+        if tipo == 'QmTOxFMTO':
+            combinations_ranked = QmTOxFMTO, QmTOxFmTO, QMTOxFmTO, QMTOxFMTO
+
+        if tipo == 'QMTOxFmTO':
+            combinations_ranked = QMTOxFmTO, QMTOxFMTO, QmTOxFMTO, QmTOxFmTO
+
+        """
+        print("Combinações possíveis: ", possible_combinations)
+        print("QMTOxFMTO:","Q", max_combination[0], "F", max_combination[1])
+        print("QmTOxFmTO:","Q", min_combination[0], "F", min_combination[1])
+        """
+
+        if len(possible_combinations) == 0:
+            QMTOxFMTO = None
+            QmTOxFmTO = None
+
+        are_all_none = all(item is None for item in combinations_ranked)
+
+        if are_all_none:
+            comb = None
+        else:   
+            comb = next(item for item in combinations_ranked if item is not None) # Retorna a primeira combinação existente.
+
+        return comb 
+
+    def valid_combinations(self):
+        ToQ = (self.matrix[0][1], self.matrix[1][1])
+
+        # Temperaturas de entrada das corrents frias
+        # ToF[0] = F1, ToF[1] = F2   
+        ToF = (self.matrix[2][1], self.matrix[3][1])
+
+        possible_combinations = []
+
+        # Combinações válidas para Q1
+        for i in range(len(ToQ)): #(ToQ[0] > ToF[i]+10)
+            if (ToQ[0] > ToF[i]) and (self.matrix[0][1] != self.matrix[0][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append([0,i])
+
+        # Combinações válidas para Q2
+        for i in range(len(ToQ)): #(ToQ[1] > ToF[i]+10)
+            if (ToQ[1] > ToF[i]) and (self.matrix[1][1] != self.matrix[1][2]) and (self.matrix[2+i][1] != self.matrix[2+i][2]):
+                possible_combinations.append([1,i])
         
+        return possible_combinations
 
-        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+    def atualizar_matrix(self, matrix):
+        self.matrix = matrix
 
-        vazao = calculo_da_vazao(Q, 'água')
-        custo_util += custo_utilidades(vazao, 'água')
+    def atualizar_prev_matrix(self, prev_matrix):
+        self.prev_matrix = prev_matrix
 
-    elif type == 'cold': # Usando vapor (aquecedor)
-        plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='red')
-        plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
+    def draw_arrow(self, text,x, start, end, color_arrow):
+        arrowprops = dict(arrowstyle='->', linestyle='-', linewidth=2, color=color_arrow)
+        plt.annotate(text, xy=(x, end), xytext=(x, start), arrowprops=arrowprops, color=color_arrow)
 
-        plt.text(x - segment_length/4 - offset, y - segment_length/4 - offset, values[2], color='red', ha='left', va='center', fontsize=10)
-        plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, values[4], color='red', ha='right', va='center', fontsize=10)
-        plt.text(x + offset, y - segment_length/2, values[5], color='blue', ha='center', va='top', fontsize=10)
+    def criar_grafico(self): 
+        y1 = [self.matrix[0][1], self.matrix[0][2], self.matrix[1][1], self.matrix[1][2]]  # Q1_To, Q1_Td, Q2_To, Q2_Td
+        y2 = [self.matrix[2][1], self.matrix[2][2], self.matrix[3][1], self.matrix[3][2]]  # F1_To, F1_Td, F2_To, F2_Td
 
-        Q = values[7] * (values[5] - values[3])
-        #print("Q: ",Q)
-        U = 1
-        print("\n AQUECEDOR")
-        custo_cap += custo_do_trocador(values, 'logarítmico', Q, U, 10)
-        print(custo_cap)
+        x1 = [0, 0.5, 0.5, 1]  # Pontos de mudança nos degraus para y1
+        x2 = [0.5, 1, 0, 0.5]  # Pontos de mudança nos degraus para y2
+        
+        y_ticks = []
 
-        # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
+        for i in y1:
+            plot_y1_step = [i,i,i-10, i-10]
+            plt.step(x1, plot_y1_step)
 
-        vazao = calculo_da_vazao(Q, 'vapor')
-        custo_util += custo_utilidades(vazao, 'vapor')
+            y_ticks.append(i)
+            y_ticks.append(i-10)
+            self.intervals.append(i-10)
 
-    # Plotting the number slightly offset from the center
-    plt.text(x + offset/2, y + offset/2, str(number), color='black', ha='center', va='center', fontsize=12, fontweight='bold')
+        for i in y2:
+            plot_y2_step = [i+10,i+10,i, i]
+            plt.step(x1, plot_y2_step)
+            y_ticks.append(i)
+            y_ticks.append(i+10)
+            self.intervals.append(i)
 
-    custo_cap = round(custo_cap,1)
-    custo_util = round(custo_util,1)
-    custo_total = round(custo_cap + custo_util,1)
-    fig_size = plt.gcf().get_size_inches()
+        self.intervals = list(set(self.intervals)) # sort and remove duplicates
+        self.intervals.sort(reverse=True)
+        #print(intervals)
+        plt.tick_params(axis='y', which='both', labelleft='on', labelright='on')
+        plt.xticks([])
 
-    if single == True:
-        # Adding labels, title, legend, and grid for better visualization
-        plt.title('Rede Final')
-        plt.grid(False)
-        plt.axis('off')
+        self.draw_arrow("",0.2,self.matrix[0][1],self.matrix[0][2], "red")
+        self.draw_arrow("",0.4,self.matrix[1][1],self.matrix[1][2], "red")
 
-        text1 = f"Ccap = {custo_cap}"
-        text2 = f"Cutil = {custo_util}"
-        text3 = f"Ctotal = {custo_total}"
+        self.draw_arrow("",0.6,self.matrix[2][1],self.matrix[2][2], "blue")
+        self.draw_arrow("",0.8,self.matrix[3][1],self.matrix[3][2], "blue")
 
-        if remaining==False:
-            plt.text(x, 1.2, text1, ha='right', va='top', color='red', fontsize=10)
-            plt.text(x, 1, text2, ha='right', va='top', color='green', fontsize=10)
-            plt.text(x, 0.8, text3, ha='right', va='top', color='blue', fontsize=10)
-        else:
-            plt.text(-0.1, 0.3, text1, ha='right', va='top', color='red', fontsize=10)
-            plt.text(-0.1, 0.25, text2, ha='right', va='top', color='green', fontsize=10)
-            plt.text(-0.1, 0.2, text3, ha='right', va='top', color='blue', fontsize=10)            
-
-        #print(custo_cap, custo_util, custo_total)
+        plt.grid(linestyle = '--')
         plt.show()
 
-def calculo_da_vazao(Q, tipo):
-    if tipo == 'água':
-        W = Q/((0.00116)*(50-30))
-    if tipo == 'vapor':
-        W = Q/0.48
+    def display_table(self, data):
+        root = tk.Tk()
+        root.title("Table Display")
 
-    return W
+        columns = ["Intervalo"] + ["R(k-1)"] + ["Oferta"] + ["Demanda"] + ["Sk"]
 
-def custo_utilidades(consumo, tipo):
-    if tipo == 'água':
-        custo_unitario = 0.00005 # $/kg
-    if tipo == 'vapor':
-        custo_unitario = 0.0015 # $/kg
+        # Create a Treeview widget
+        table = ttk.Treeview(root, columns=columns, show="headings")
 
-    return 8500*(custo_unitario*consumo)
+        # Set column headings with center alignment
+        for col in columns:
+            table.heading(col, text=col, anchor="center")
 
-def custo_do_trocador(values, tipo, Q, U, delta_T_min):
+        # Insert data into the table with center alignment
+        for i, row in enumerate(data, start=1):
+            values = [i] + row
+            table.insert("", "end", values=values, tags=("centered",))
 
-    # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-    #print("values", values)
-    #print("delta_1", values[2], values[5])
-    #print("delta_2", values[4], values[3])
-    delta_1 = values[2] - values[5] # TEQ - TFS
-    delta_2 = values[4] - values[3] # TSQ - TEF
+        # Center the cell values
+        table.tag_configure("centered", anchor="center")
 
-    print("TEQ:",values[2],"TSQ:",values[4],"TEF:",values[3],"TSF:",values[5])
+        # Pack the Treeview widget
+        table.pack()
 
-    # Se entrada quente - saída fria é menor que ΔT(min)
-    if delta_1 < delta_T_min:
-        delta_1 += 10
+        root.mainloop()
 
-    # Se saída quente - entrada fria é menor que ΔT(min)
-    if delta_2 < delta_T_min:
-        delta_2 += 10
+    def is_pair_overlapping(self, pair1, pair2):
+        # Sort the pairs to ensure proper comparison
+        pair1 = sorted(pair1)
+        pair2 = sorted(pair2)
 
-    if tipo == 'aritmético':
-        area = Q / (U*(delta_1+delta_2)/2)
+        # Check if pair1 is completely within pair2
+        return pair1[0] >= pair2[0] and pair1[1] <= pair2[1]
     
-    if tipo == 'logarítmico':
+    def offer_demand(self):
+        
+        Rk = 0
+        a1 = 1
+        a2 = 1
+        offer_demand = []
+
+        for i in range(len(self.intervals)-1): 
+            
+            if self.is_pair_overlapping((self.intervals[i]+self.delta_T_min, self.intervals[i+1]+self.delta_T_min), (self.matrix[0][2], self.matrix[0][1])): # passa por arrow1
+                a1 = self.matrix[0][0]
+            else:
+                a1 = 0
+
+            if self.is_pair_overlapping((self.intervals[i]+self.delta_T_min, self.intervals[i+1]+self.delta_T_min), (self.matrix[1][2], self.matrix[1][1])): # passa por arrow2
+                a2 = self.matrix[1][0]
+            else:
+                a2 = 0
+
+            if self.is_pair_overlapping((self.intervals[i], self.intervals[i+1]), (self.matrix[2][2], self.matrix[2][1])): # passa por arrow3
+                a3 = self.matrix[2][0]
+            else:
+                a3 = 0
+
+            if self.is_pair_overlapping((self.intervals[i], self.intervals[i+1]), (self.matrix[3][2], self.matrix[3][1])): # passa por arrow4
+                a4 = self.matrix[3][0]
+            else:
+                a4 = 0
+            
+            y = (self.intervals[i]-self.intervals[i+1])
+            lines = [Rk, y*a1 +y*a2, y*a3 +y*a4, Rk + y*a1 +y*a2 - y*a3 - y*a4]
+
+            if lines[3] < 0: # pinch
+                Rk = 0 
+            else:
+                Rk = lines[3]
+            
+            offer_demand.append(lines)
+        
+        self.display_table(offer_demand)
+    
+    def loop_RPS(self, tipo):
+        while True:
+            if self.user_input == False:
+                if self.iterations == 0 and self.Qx_init != None and self.Fx_init != None:
+                    comb = (self.Qx_init, self.Fx_init)
+                else:    
+                    comb = self.next_combination(tipo)
+
+                if comb == None: # Primeira condição de quebra -> Deve haver combinações possíveis
+                    break
+
+                if comb[0] != self.last_comb[0] and comb[1] != self.last_comb[1] and self.iterations != 0:
+                    self.is_there_two_chains = True
+                    self.chains_not_in_the_loop = (comb[0],comb[1])
+                    break
+
+                if comb in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
+                    break
+
+            else:
+                valid = self.valid_combinations()
+                
+                are_all_none = all(item is None for item in valid) # Primeira condição de quebra -> Deve haver combinações possíveis
+
+                troca_igual_anterior = False
+
+                if len(valid) == 1 and valid[0] in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
+                    troca_igual_anterior = True
+                
+                if are_all_none or troca_igual_anterior:
+                    print("\n","------------------------------","\n")
+                    print("NÃO HÁ MAIS COMBINAÇÕES POSSÍVEIS. COMPLETANDO COM UTILIDADES.")
+                    break
+                else:
+                    for i in range(len(valid)):
+                        print(f"Combinação válida: Q{valid[i][0]+1}xF{valid[i][1]+1}")
+                
+                    comb = [0,0]
+
+                    comb[0] = int(input("Escolha a corrente quente: Q")) -1
+                    comb[1] = int(input("Escolha a corrente fria: F")) -1
+            
+            self.used[comb[0]] = True
+            self.used[comb[1]+2] = True
+
+            new_matrix = self.perform_transform(comb[0]+1, comb[1]+1)
+            self.atualizar_matrix(new_matrix)
+
+            self.print_comb(comb, new_matrix)
+
+            # Com a nova matriz, devemos calcular o custo do trocador
+            
+            TEQ = self.prev_matrix[comb[0]][1]
+            TSQ = new_matrix[comb[0]][1]
+            TEF = self.prev_matrix[comb[1]+2][1]
+            TSF = new_matrix[comb[1]+2][1]
+
+            self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 0.75) # U = 0.75 pois é trocador de calor
+
+            Qx = comb[0]+1
+            Fx = comb[1]+1
+
+            self.plot.append([TEQ, TSQ, TEF, TSF, Qx, Fx]) #self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
+
+            self.comb_history.append(comb)
+            self.last_comb = comb
+
+    def completando_utilidades(self):
+
+        matrix_arr = np.array(self.matrix)
+        
+        for i in range(2): # Utilidades para Q1 e Q2
+            """
+            Obs: Completar com utilidades é simplesmente fazer uma troca de calor como
+            qualquer outra, com a diferença de que o aquecimento ouresfriamento não será
+            com uma corrente específica, mas sim com uma de água. Dessa forma, a restrição
+            de delta_T_min continua valendo.
+            """ 
+
+            # Se entrada quente - saída fria é menor que ΔT(min)
+            """
+            Exemplo: a meta de resfriamento é 0 graus, mas a temp de entrada e saída da água é, 30 e 50.
+            Logo, só podemos resfriar a corrente até 30. A meta de saída da corrente é mudada.
+            """
+
+            WCp = matrix_arr[i,0]
+            TEQ = matrix_arr[i,1]
+            TSQ = matrix_arr[i,2]
+            TEF = self.temp_agua[0]
+            TSF = self.temp_agua[1]
+
+            self.Q = WCp * (TEQ - TSQ)
+            
+            if TSQ - self.temp_agua[1] < self.delta_T_min and self.used[i] == True: # Ex: 50 - 50 < 10, TSQ = 50+10
+                print(f"Q{i} terá nova meta de resfriamento: {self.temp_agua[1] + self.delta_T_min}ºC, ao invés de {TSQ}ºC, por causa de ΔT(min)={self.delta_T_min}.")
+                TSQ = self.temp_agua[1] + self.delta_T_min 
+
+            # Se ainda não chegou na meta definida
+            if TEQ > TSQ and self.used[i] == True:
+                self.iterations += 1
+
+                Qx = i+1
+                Fx = None
+                
+                self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx]) #self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
+
+                self.print_utilidades_resfriamento(f"{i+1}", TSQ, matrix_arr[i])
+                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 0.75) # U = 0.75 pois é resfriador
+                self.atualizar_custo_util(WCp, TEQ, TSQ, 0.75) # U = 0.75 pois é resfriador
+        
+        for i in range(2): # Utilidades para F1 e F2
+            WCp = matrix_arr[i+2,0]
+            TEF = matrix_arr[i+2,1]
+            TSF = matrix_arr[i+2,2]
+            TEQ = self.temp_vapor[0]
+            TSQ = self.temp_vapor[1]
+
+            self.Q = WCp * (TSF - TEF)
+
+            if self.temp_vapor[1] - TSF < self.delta_T_min and self.used[i+2] == True: # Ex: 250 - 250 < 10, TSF = 250+10
+                print(f"F{i+1} terá nova meta de resfriamento: {self.temp_vapor[1] + self.delta_T_min}ºC, ao invés de {TSF}ºC, por causa de ΔT(min)={self.delta_T_min}.")
+                TSF = self.temp_vapor[1] - self.delta_T_min
+            
+            # Se ainda não chegou na meta definida
+            if TEF < TSF and self.used[i+2] == True: 
+                self.iterations += 1
+
+                Qx = None
+                Fx = i+1
+
+                self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx]) #self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
+
+                self.print_utilidades_aquecimento(f"{i+1}", TSF, matrix_arr[i+2])
+                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 1.00) # U = 1.00 pois é aquecedor
+                self.atualizar_custo_util(WCp, TSF, TEF, 1.00) # U = 1.00 pois é aquecedor
+
+    def print_comb(self, comb, new_matrix):
+        
+        print("\n","------------------------------","\n")
+
+        print(f"(TROCADOR DE CALOR) Combinação feita: Q{comb[0]+1}xF{comb[1]+1}")
+
+        print(pd.DataFrame(new_matrix, index=['']*len(new_matrix), columns=['']*len(new_matrix[0])),"\n")
+
+    def print_utilidades_resfriamento(self, id, TSQ, corrente):
+        
+        print("\n","------------------------------","\n")
+
+        print(f"(RESFRIADOR) Resfriamento feito em: Q{id} \n")
+
+        print(pd.DataFrame(self.matrix, index=['']*len(self.matrix), columns=['']*len(self.matrix[0])),"\n")
+
+        print(corrente, "\n")
+
+        print(f"Resfriamento até {TSQ}ºC com água de T(in)={self.temp_agua[0]}ºC e T(out)={self.temp_agua[1]}ºC \n")
+
+    def print_utilidades_aquecimento(self, id, TSF, corrente):
+        
+        print("\n","------------------------------","\n")
+
+        print(f"(AQUECEDOR) Aquecimento feito em: F{id}")
+
+        print(pd.DataFrame(self.matrix, index=['']*len(self.matrix), columns=['']*len(self.matrix[0])),"\n")
+
+        print(corrente, "\n")
+
+        print(f"Aquecimento até {TSF}ºC com vapor de T(in)={self.temp_vapor[0]}ºC e T(out)={self.temp_vapor[1]}ºC")
+
+    def atualizar_custo_cap(self, TEQ, TSF, TSQ, TEF, U):
+
+        delta_1 = TEQ - TSF 
+        delta_2 = TSQ - TEF 
+
+        print("TEQ:",TEQ,"TSQ:",TSQ,"TEF:",TEF,"TSF:",TSF)
+
+        #if tipo == 'aritmético':
+        #    area = Q / (U*(delta_1+delta_2)/2)
+        
+        #if tipo == 'logarítmico':
         if delta_1 == delta_2: # Não podemos passar na fórmula abaixo pq gera uma indeterminação
             area = delta_1
         else:
-            area = Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
-    custo_do_trocador = 130 * (math.pow(area, (65/100)))
+            area = self.Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
 
-    return custo_do_trocador
+        custo_do_trocador = 130 * (math.pow(area, (65/100)))
+        
+        self.custo_cap += custo_do_trocador
+        print("Novo custo cap:", round(self.custo_cap,2))
 
-def plot_multiple_transfers(plot_list, last_matrix, is_there_two_chains):
-    # Plotting the point
-    plt.scatter(1, 1, color='red', label='Point')
+    def atualizar_custo_util(self, WCp, T_in, T_out, U):
 
-    x,y = 0,0
-    plotted_out = []
-    values_to_clear = []
+        Q = WCp*(T_in - T_out)
 
-    for i in range(len(last_matrix)):
-        if last_matrix[i][1] == last_matrix[i][2]:
-            values_to_clear.append(last_matrix[i][1])
+        # W = vazão
 
-    for i in range(len(plot_list)):
+        if U == 0.75: # Resfriador
 
-        values = plot_list[i]
-        #print("len", len(plot_list))
-        if i == 0:
-            plotted_out.append([values[4], 0,0, 'hot']) # TSQ, plotted at 0,0
-            plotted_out.append([values[5], 0,0, 'cold']) # TSF, plotted at 0,0
+            W = Q/((0.00116)*(self.temp_agua[1] - self.temp_agua[0])) # 0.00116 = Cp_água
+            self.custo_util += 8500*(self.custo_unit_agua*W)
 
-            if len(plot_list)-1 == 0:
-                #print("1")
-                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
+        if U == 1.00: # Aquecedor
 
-                for a in range(len(plotted_out)): # Completando com utilidades
-                    
-                    if a+1 == len(plotted_out):
-                        single = True
-                    else:
-                        single = False  
-                    
-                    if plotted_out[a][3] == 'hot': # água de 30 a 50
-                        
-                        for k in range(len(last_matrix)):
-                            if last_matrix[k][1] == plotted_out[a][0]:
-                                meta = last_matrix[k][2]
-                                WCp_Q = last_matrix[k][0]
+            W = Q/0.48 # 0.48 = Cp_vapor
+            self.custo_util += 8500*(self.custo_unit_vapor*W)
+        
+        print("Novo custo útil:", round(self.custo_util,2),"\n")
 
-                        values = [0,0,plotted_out[a][0],30,meta,50,WCp_Q,0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                        plot_single_transfer(plotted_out[a][1]+1, plotted_out[a][2], (a+i+2),values,'hot', single=single)
+    def plot_single(self, plot_list, id_plot, last):
 
-                    if plotted_out[a][3] == 'cold': # vapor de 250 a 250
+        TEQ = plot_list[0] # self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
+        TSQ = plot_list[1]
+        TEF = plot_list[2]
+        TSF = plot_list[3]
+        Qx = plot_list[4]
+        Fx = plot_list[5]
+        segment_length = 1
+        offset = 0.1
+        x = self.coordinates[0]
+        y = self.coordinates[1]
+        
+        if (Qx and Fx) != None: # Trocador
+            plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
+            plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')            
 
-                        for h in range(len(last_matrix)):
-                            if last_matrix[h][1] == plotted_out[a][0]:
-                                meta = last_matrix[h][2]
-                                WCp_F = last_matrix[h][0]
+            text_hot = f'Q{Qx} = {TEQ}'
+            text_cold = f'F{Fx} = {TEF}'
 
-                        values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-                        plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
-            else:
-                #print("2")
-                plot_single_transfer(0,0,(i+1),values,'reta', single=False, first=True)
+            # Adding labels 
+            plt.text(x - segment_length/2, y + offset, text_hot, color='red', ha='right', va='center', fontsize=10)
+            plt.text(x + offset, y + segment_length/2, text_cold, color='blue', ha='center', va='bottom', fontsize=10)
 
+            plt.text(x + segment_length/2, y + offset, f'{TSQ}', color='red', ha='left', va='center', fontsize=10)
+            plt.text(x + offset, y - segment_length/2, f'{TSF}', color='blue', ha='center', va='top', fontsize=10)
+
+        if Fx == None: # Resfriador 
+            plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='blue')
+            plt.plot([x - segment_length/2, x + segment_length/2], [y, y], color='red')
             
-            # Quando uma troca n pode ser realizada na rede, ela é realizada individualmente.
+            plt.text(x - segment_length/4 - offset, y - segment_length/4 - offset, TSF, color='blue', ha='left', va='center', fontsize=10)
+            plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, TEF, color='blue', ha='right', va='center', fontsize=10)
+            plt.text(x + segment_length/2, y + offset, TSQ, color='red', ha='left', va='center', fontsize=10)
 
-            plot_array = np.array(plot_list)
+        if Qx == None: # Aquecedor 
+            plt.plot([x - segment_length/4, x + segment_length/4], [y - segment_length/4, y + segment_length/4], color='red')
+            plt.plot([x, x], [y - segment_length/2, y + segment_length/2], color='blue')
 
-            if is_there_two_chains == False:
-                if not 1 in plot_array[:, [0]]: # Não tem Q1 na rede, a corrente deve ser resfriada
-                    values = [0,0,last_matrix[0][1],30,last_matrix[0][2],50,last_matrix[0][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                    plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)            
-
-                if not 2 in plot_array[:, [0]]: # Não tem Q2 na rede, a corrente deve ser resfriada
-                    values = [0,0,last_matrix[1][1],30,last_matrix[1][2],50,last_matrix[1][0],0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                    plot_single_transfer(0, 0, 1,values,'hot', single=True, remaining=True)
+            plt.text(x - segment_length/4 - offset, y - segment_length/4 - offset, TEQ, color='red', ha='left', va='center', fontsize=10)
+            plt.text(x + segment_length/4 + offset, y + segment_length/4 + offset, TSQ, color='red', ha='right', va='center', fontsize=10)
+            plt.text(x + offset, y - segment_length/2, TSF, color='blue', ha='center', va='top', fontsize=10)
         
-                if not 1 in plot_array[:, [1]]: # Não tem F1 na rede, a corrente deve ser resfriada
-                    values = [0,0,250,last_matrix[2][1],250,last_matrix[2][2],0,last_matrix[2][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                    plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
+        # Plotting the number slightly offset from the center
+        plt.text(x + offset/2, y + offset/2, str(id_plot), color='black', ha='center', va='center', fontsize=12, fontweight='bold')
 
-                if not 2 in plot_array[:, [1]]: # Não tem F2 na rede, a corrente deve ser resfriada
-                    values = [0,0,250,last_matrix[3][1],250,last_matrix[3][2],0,last_matrix[3][0]] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                    plot_single_transfer(0, 0, 1,values,'cold', single=True, remaining=True)
+        if last == True:
+            # Adding labels, title, legend, and grid for better visualization
+            plt.title('Rede Final')
+            plt.grid(False)
+            plt.axis('off')
 
-            prev_value_x = 0
-            prev_value_y = 0
-            prev_values = values
+            text1 = f"Ccap = {round(self.custo_cap,2)}"
+            text2 = f"Cutil = {round(self.custo_util,2)}"
+            text3 = f"Ctotal = {round(self.custo_cap + self.custo_util,2)}"
 
+            plt.text(2.5, 0.8, text1, ha='right', va='top', color='red', fontsize=10)
+            plt.text(2.5, 0.6, text2, ha='right', va='top', color='green', fontsize=10)
+            plt.text(2.5, 0.4, text3, ha='right', va='top', color='blue', fontsize=10)         
 
-        else:
-            if values[3] == prev_values[5]: # Conexão por corrente fria
-                x = prev_value_x
-                y = prev_value_y - 1
-                values_to_clear.append(values[3])
+            #print(custo_cap, custo_util, custo_total)
+            plt.show()
 
-            if values[2] == prev_values[4]: # Conexão por corrente quente
-                x = prev_value_x + 1
-                y = prev_value_y
-                values_to_clear.append(values[2])
-            
-            prev_value_x = x
-            prev_value_y = y
-            prev_values = values
- 
-            if i == len(plot_list)-1: # Última iteração
-                plotted_out.append([values[4], x,y, 'hot']) 
-                plotted_out.append([values[5], x,y, 'cold']) 
-                #print(values) # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor, Wcp_Q, Wcp_F
-                #print("3")
-                
-                plot_single_transfer(x,y,(i+1),values,'reta', single=False) # Terão elementos livres!
-
-                #print(plotted_out)
-                #print(values_to_clear)
-
-                for j in range(len(plotted_out)-1, -1, -1):  
-                    if plotted_out[j][0] in values_to_clear:
-                        plotted_out.pop(j)
-                
-                for a in range(len(plotted_out)): # Completando com utilidades
-                    
-                    if a+1 == len(plotted_out):
-                        single = True
-                    else:
-                        single = False  
-                    
-                    if plotted_out[a][3] == 'hot': # água de 30 a 50
-                        
-                        for k in range(len(last_matrix)):
-                            if last_matrix[k][1] == plotted_out[a][0]:
-                                meta = last_matrix[k][2]
-                                WCp_Q = last_matrix[k][0]
-
-                        values = [0,0,plotted_out[a][0],30,meta,50,WCp_Q,0] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-                        plot_single_transfer(plotted_out[a][1]+1, plotted_out[a][2], (a+i+2),values,'hot', single=single)
-
-                    if plotted_out[a][3] == 'cold': # vapor de 250 a 250
-
-                        for h in range(len(last_matrix)):
-                            if last_matrix[h][1] == plotted_out[a][0]:
-                                meta = last_matrix[h][2]
-                                WCp_F = last_matrix[h][0]
-
-                        values = [0,0,250,plotted_out[a][0],250,meta, 0, WCp_F] # Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor
-                        plot_single_transfer(plotted_out[a][1], plotted_out[a][2]-1, (a+i+2),values,'cold', single=single)
-
+    def plot_multiple(self):
+        for i in range(len(self.plot)): # TEQ, TSQ, TEF,TSF, Qx, Fx
+            if i == 0:
+                self.plot_single(self.plot[0], 1, False) # plot_single(self, plot_list, id_plot, last)
             else:
-                plotted_out.append([values[4], x,y, 'hot']) 
-                plotted_out.append([values[5], x,y, 'cold']) 
-                #print("4")
-                plot_single_transfer(x,y,(i+1),values,'reta', single=False)
+                
+                self.update_coordinates(self.plot[i-1], self.plot[i])
+                
+                last = False
 
-def perform_transform(matrix, Qx, Fx, delta_T_min, i):
+                if i == len(self.plot)-1:
+                    last = True
+                
+                self.plot_single(self.plot[i], i+1, last)
 
-    QMT0 = matrix[Qx-1].copy()
-    FMT0 = matrix[Fx+1].copy()
-
-    """
-        TEQ*=ToQ
-           ↓
-TEF*=ToF  →o→ TSF=TdF
-           ↓
-        TSQ=TdQ
-    """
-
-    # WCp
-    WCp_Q = QMT0[0]
-    WCp_F = FMT0[0]
-
-    # Temperaturas de entrada
-    TEQ_fixado = QMT0[1] # TEQ* = ToQ
-    TEF_fixado = FMT0[1] # TEF* = ToF
-
-    # Temperaturas de saída
-    TSQ_meta = QMT0[2] # TSQ = TdQ
-    TSF_meta = FMT0[2] # TSF = TdF
-
-    # Se entrada quente - saída fria é menor que ΔT(min)
-    if TEQ_fixado - TSF_meta < delta_T_min:
-        TSF_meta = TEQ_fixado - 10
-
-    # Se saída quente - entrada fria é menor que ΔT(min)
-    if TSQ_meta - TEF_fixado < delta_T_min:
-        TSQ_meta = TEF_fixado + 10
-
-    #print("1", QMT0[0], QMT0[1], QMT0[2])
-    #print("1",WCp_Q, TEQ_fixado, TSQ_meta)
-    # Cálculo da Oferta e Demanda
-    oferta =  WCp_Q * (TEQ_fixado - TSQ_meta)
-    #print(oferta)
-    #print("2",WCp_Q, TEQ_fixado, TSQ_meta)
-    demanda = WCp_F * (TSF_meta - TEF_fixado)
-
-    # Q
-
-    Q = min(oferta, demanda)
-
-    if Q == oferta:
-        TSQ_meta = TSQ_meta # Temperatura de saída quente confirmada
-        TSF_meta = TEF_fixado + round(Q/WCp_F,1) 
-    
-    # Se Q = demanda, TSQ = entrada quente - Q / WCp_F
-    if Q == demanda:
-        TSF_meta = TSF_meta
-        TSQ_meta = TEQ_fixado - round(Q/WCp_Q,1) 
-
-    # TSF_meta e TSQ_meta são atualizados
-    QMT0[1] = TSQ_meta
-    FMT0[1] = TSF_meta
-
-    new_matrix = matrix.copy()
-
-    new_matrix[Qx-1] = QMT0
-    new_matrix[Fx+1] = FMT0
-
-    return new_matrix
-
-def combinations(matrix, tipo):
-    # Temperaturas de entrada das corrents quentes 
-    # ToQ[0] = Q1, ToQ[1] = Q2
-    ToQ = (matrix[0][1], matrix[1][1])
-
-    # Temperaturas de entrada das corrents frias
-    # ToF[0] = F1, ToF[1] = F2   
-    ToF = (matrix[2][1], matrix[3][1])
-
-    index_max_ToQ = np.argmax(ToQ)
-    index_min_ToQ = np.argmin(ToQ)
-    index_max_ToF = np.argmax(ToF)
-    index_min_ToF = np.argmin(ToF)
-
-    max_combination = (index_max_ToQ,index_max_ToF)
-    min_combination = (index_min_ToQ,index_min_ToF)
-    mix_1 = (index_min_ToQ,index_max_ToF)
-    mix_2 = (index_max_ToQ,index_min_ToF)
-
-    possible_combinations = []
-
-    # Combinações válidas para Q1
-    for i in range(len(ToQ)): #(ToQ[0] > ToF[i]+10)
-        if (ToQ[0] > ToF[i]) and (matrix[0][1] != matrix[0][2]) and (matrix[2+i][1] != matrix[2+i][2]):
-            possible_combinations.append((0,i))
-
-    # Combinações válidas para Q2
-    for i in range(len(ToQ)): #(ToQ[1] > ToF[i]+10)
-        if (ToQ[1] > ToF[i]) and (matrix[1][1] != matrix[1][2]) and (matrix[2+i][1] != matrix[2+i][2]):
-            possible_combinations.append((1,i))
+    def update_coordinates(self, prev, current):
         
-    QMTOxFMTO = max_combination if max_combination in possible_combinations else None
-    QmTOxFmTO = min_combination if min_combination in possible_combinations else None
-    QmTOxFMTO = mix_1 if mix_1 in possible_combinations else None
-    QMTOxFmTO = mix_2 if mix_2 in possible_combinations else None
+        Qx_prev = prev[4]
+        Qx_current = current[4]
+        Fx_prev = prev[5]
+        Fx_current = current[5]
 
-    if tipo == 'QMTOxFMTO':
-        combinations_ranked = QMTOxFMTO, QMTOxFmTO,QmTOxFMTO, QmTOxFmTO,
+        if Qx_prev == Qx_current and Qx_current != None and Fx_current != None: # Qx_prev = Qx_current -> conexão trocador por corrente quente
+            self.F_coords[Fx_prev-1][0] = self.coordinates[0]
+            self.coordinates[0] += 1
+            self.F_coords[Fx_current-1][0] = self.coordinates[0]
+            self.F_coords[Fx_current-1][1] = self.coordinates[1]
+            self.Q_coords[Qx_current-1][0] = self.coordinates[0]
+            self.Q_coords[Qx_current-1][1] = self.coordinates[1]
 
-    if tipo == 'QmTOxFmTO':
-        combinations_ranked = QmTOxFmTO, QmTOxFMTO, QMTOxFmTO, QMTOxFMTO
+        if Fx_prev == Fx_current and Qx_current != None and Fx_current != None: # Fx_prev = Fx_current -> conexão trocador por corrente fria
+            self.Q_coords[Qx_prev-1][1] = self.coordinates[1]
+            self.coordinates[1] -= 1
+            self.Q_coords[Qx_current-1][1] = self.coordinates[1]
+            self.Q_coords[Qx_current-1][0] = self.coordinates[0]
+            self.F_coords[Fx_current-1][1] = self.coordinates[1]
+            self.F_coords[Fx_current-1][0] = self.coordinates[0]
 
-    if tipo == 'QmTOxFMTO':
-        combinations_ranked = QmTOxFMTO, QmTOxFmTO, QMTOxFmTO, QMTOxFMTO
+        if Fx_current == None: #resfriador
+            self.coordinates[0] = self.Q_coords[Qx_current-1][0] + 1
+            self.coordinates[1] = self.Q_coords[Qx_current-1][1]      
 
-    if tipo == 'QMTOxFmTO':
-        combinations_ranked = QMTOxFmTO, QMTOxFMTO, QmTOxFMTO, QmTOxFmTO
+        if Qx_current == None: #aquecedor
+            self.coordinates[0] = self.F_coords[Fx_current-1][0]
+            self.coordinates[1] = self.F_coords[Fx_current-1][1] - 1
 
-    """
-    print("Combinações possíveis: ", possible_combinations)
-    print("QMTOxFMTO:","Q", max_combination[0], "F", max_combination[1])
-    print("QmTOxFmTO:","Q", min_combination[0], "F", min_combination[1])
-    """
-    
-    QMTOxFMTO = (max_combination[0],max_combination[1])
-    QmTOxFmTO = (min_combination[0],min_combination[1])
-
-    if len(possible_combinations) == 0:
-        QMTOxFMTO = None
-        QmTOxFmTO = None
-    
-    return combinations_ranked # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
-
-
-def perform_RPS(matrix, Qx=None, Fx=None, tipo='QMTOxFMTO', delta_T_min=10, plot=False):
-    comb = (0,0)
-    count = 1
-    plot_multiple = []
-    plot_multiple_chains = []
-    plot_single = [0,0,0,0,0,0,0,0]
-    prev_Q_x = 0
-    prev_F_x = 0
-    is_there_two_chains = False
-    #while type != None:
-    while count<10:
-        if count == 1: 
-            new_matrix = matrix
-            print("\n","Matriz original: ",count,"\n")
-            l1, l2 = len(new_matrix), len(new_matrix[0])
-            print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
-            last_comb = 0
-
-        valid = combinations(new_matrix, tipo=tipo) # QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
-        
-        if all(v is None for v in valid): # Se não houver combinações válidas o loop para
-            break
-
-        comb = next(item for item in valid if item is not None) # Retorna a primeira combinação existente.
-        
-        if comb == last_comb:
-            break
-        
-        last_comb = comb
-
-        if Qx != None and Fx != None and count == 1: # Caso o user passe uma combinação inicial
-            Q_x = Qx+1
-            F_x = Fx+1
-        elif (Qx != None and Fx == None) or (Qx == None and Fx != None):
-            print("A função requer tanto Qx como Fx para funcionar, caso passe uma combinação inicial.")
-        else: # Caso o user não passe uma combinação inicial -> QMTOxFMTO default
-            Q_x = comb[0]+1
-            F_x = comb[1]+1
-
-        # Qx, Fx, Qx_valor, Fx_valor
-        plot_single = [Q_x, F_x, new_matrix[Q_x-1][1], new_matrix[F_x+1][1],0,0,0,0] # Sabemos as entradas, mas ainda não as saídas
-        
-        new_matrix = perform_transform(new_matrix, Q_x, F_x, delta_T_min, count)
-
-        print("------------------------------")
-        print("\n","Número da troca: ",count,"\n")
-        print("Q", Q_x, "F", F_x,"\n", sep='')
-
-        plot_single[4] = new_matrix[Q_x-1][1] # Saída quente -> TSQ_valor
-        plot_single[5] = new_matrix[F_x+1][1] # Saída fria -> TSF_valor
-        plot_single[6] = new_matrix[Q_x-1][0] # Wcp_Q
-        plot_single[7] = new_matrix[F_x+1][0] # Wcp_F
-
-        l1, l2 = len(new_matrix), len(new_matrix[0])
-
-        #print(plot_single)
-        #print("Qx, Fx, Qx_valor, Fx_valor, TSQ_valor, TSF_valor")
-        print(pd.DataFrame(new_matrix, index=['']*l1, columns=['']*l2),"\n")
-        #print(plot_single)
-
-        if Q_x != prev_Q_x and F_x != prev_F_x and count!= 1:
-            plot_multiple_chains.append(plot_single)
-            is_there_two_chains = True
-        else:
-            plot_multiple.append(plot_single)
-
-        prev_Q_x = Q_x
-        prev_F_x = F_x
-
-        count+=1
-    
-    if plot == True:
-        return plot_multiple,plot_multiple_chains, new_matrix, is_there_two_chains
-
-def display_table(data):
-    root = tk.Tk()
-    root.title("Table Display")
-
-    columns = ["Intervalo"] + ["R(k-1)"] + ["Oferta"] + ["Demanda"] + ["Sk"]
-
-    # Create a Treeview widget
-    table = ttk.Treeview(root, columns=columns, show="headings")
-
-    # Set column headings with center alignment
-    for col in columns:
-        table.heading(col, text=col, anchor="center")
-
-    # Insert data into the table with center alignment
-    for i, row in enumerate(data, start=1):
-        values = [i] + row
-        table.insert("", "end", values=values, tags=("centered",))
-
-    # Center the cell values
-    table.tag_configure("centered", anchor="center")
-
-    # Pack the Treeview widget
-    table.pack()
-
-    root.mainloop()
-
-def is_pair_overlapping(pair1, pair2):
-    # Sort the pairs to ensure proper comparison
-    pair1 = sorted(pair1)
-    pair2 = sorted(pair2)
-
-    # Check if pair1 is completely within pair2
-    return pair1[0] >= pair2[0] and pair1[1] <= pair2[1]
-
-def offer_demand(matriz, intervals, temp_min):
-    
-    Rk = 0
-    a1 = 1
-    a2 = 1
-    offer_demand = []
-
-    for i in range(len(intervals)-1): 
-        
-        if is_pair_overlapping((intervals[i]+temp_min, intervals[i+1]+temp_min), (matriz[0][2], matriz[0][1])): # passa por arrow1
-            a1 = matriz[0][0]
-        else:
-            a1 = 0
-
-        if is_pair_overlapping((intervals[i]+temp_min, intervals[i+1]+temp_min), (matriz[1][2], matriz[1][1])): # passa por arrow2
-            a2 = matriz[1][0]
-        else:
-            a2 = 0
-
-        if is_pair_overlapping((intervals[i], intervals[i+1]), (matriz[2][2], matriz[2][1])): # passa por arrow3
-            a3 = matriz[2][0]
-        else:
-            a3 = 0
-
-        if is_pair_overlapping((intervals[i], intervals[i+1]), (matriz[3][2], matriz[3][1])): # passa por arrow4
-            a4 = matriz[3][0]
-        else:
-            a4 = 0
-        
-        y = (intervals[i]-intervals[i+1])
-        lines = [Rk, y*a1 +y*a2, y*a3 +y*a4, Rk + y*a1 +y*a2 - y*a3 - y*a4]
-
-        if lines[3] < 0: # pinch
-            Rk = 0 
-        else:
-            Rk = lines[3]
-        
-        offer_demand.append(lines)
-    
-    #print(matriz)
-    #print(offer_demand)
-    display_table(offer_demand)
-        
-def draw_arrow(text,x, start, end, color_arrow):
-    arrowprops = dict(arrowstyle='->', linestyle='-', linewidth=2, color=color_arrow)
-    plt.annotate(text, xy=(x, end), xytext=(x, start), arrowprops=arrowprops, color=color_arrow)
-
-def criar_grafico(matriz): 
-    y1 = [matriz[0][1], matriz[0][2], matriz[1][1], matriz[1][2]]  # Q1_To, Q1_Td, Q2_To, Q2_Td
-    y2 = [matriz[2][1], matriz[2][2], matriz[3][1], matriz[3][2]]  # F1_To, F1_Td, F2_To, F2_Td
-
-    x1 = [0, 0.5, 0.5, 1]  # Pontos de mudança nos degraus para y1
-    x2 = [0.5, 1, 0, 0.5]  # Pontos de mudança nos degraus para y2
-    
-    y_ticks = []
-    intervals = []
-
-    for i in y1:
-        plot_y1_step = [i,i,i-10, i-10]
-        plt.step(x1, plot_y1_step)
-
-        y_ticks.append(i)
-        y_ticks.append(i-10)
-        intervals.append(i-10)
-
-    for i in y2:
-        plot_y2_step = [i+10,i+10,i, i]
-        plt.step(x1, plot_y2_step)
-        y_ticks.append(i)
-        y_ticks.append(i+10)
-        intervals.append(i)
-
-    intervals = list(set(intervals)) # sort and remove duplicates
-    intervals.sort(reverse=True)
-    #print(intervals)
-    plt.tick_params(axis='y', which='both', labelleft='on', labelright='on')
-    plt.xticks([])
-
-    draw_arrow("",0.2,matriz[0][1],matriz[0][2], "red")
-    draw_arrow("",0.4,matriz[1][1],matriz[1][2], "red")
-
-    draw_arrow("",0.6,matriz[2][1],matriz[2][2], "blue")
-    draw_arrow("",0.8,matriz[3][1],matriz[3][2], "blue")
-
-    #plt.xlabel('Eixo X')
-    #plt.ylabel('Eixo Y')
-    plt.legend()
-    plt.grid(linestyle = '--')
-    plt.show()
-
-    print("Intervals", intervals)
-    offer_demand(matriz, intervals, 10)
-
-# Função chamada quando o botão é clicado
-def obter_numeros():
-    matriz = []
-    for i in range(4):
-        linha = []
-        for j in range(3):
-            valor = float(entrada_matriz[i][j].get())
-            linha.append(valor)
-        matriz.append(linha)
-
-    #exibir_matriz(matriz)
-    criar_grafico(matriz)
-    
-    # Chamar RPS
-    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, plot=True)
-
-    plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
-
-    if plot_multiple_chains != []:
-        plot_multiple_transfers(plot_multiple_chains, last_matrix,is_there_two_chains)
-
-def exibir_matriz(matriz):
-    for i in range(4):
-        for j in range(3):
-            print(matriz[i][j], end="\t")
-
-input_user = False
-
-matriz =[[10.0, 180.0, 90.0], # WCp, Q1_T0, Q1_Td
+matrix =[[10.0, 180.0, 90.0], # WCp, Q1_T0, Q1_Td
          [2.0, 250.0, 140.0], # WCp, Q2_T0, Q2_Td
          [5.0, 60.0, 150.0],  # WCp, F1_T0, F1_Td
          [7.0, 100.0, 220.0]] # WCp, F2_T0, F2_Td
@@ -700,44 +641,36 @@ matriz_aula = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
                [2.0, 30.0, 140.0],  # WCp, F1_T0, F1_Td
                [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
 
-if input_user == True:
-    # Cria a janela da GUI
-    janela = tk.Tk()
-    janela.title("Inserir Matriz 4x3")
+matriz_escolhida = matrix
+user_input = True
 
-    # Cria rótulos para as colunas
-    coluna_legendas = ["WCp, KW/°C", "To, °C", "Td, °C"]
-    for j in range(3):
-        coluna_legenda = tk.Label(janela, text=coluna_legendas[j])
-        coluna_legenda.grid(row=0, column=j + 1)
+delta_T_min = 10
+loop = IntegraçãoEnergética(matriz_escolhida, delta_T_min, Qx=None, Fx=None, user_input=user_input) #Qx=0 e Fx=1 dão erro
+loop.criar_grafico()
+loop.offer_demand()
 
-    # Cria rótulos para as linhas e entradas para a matriz
-    entrada_matriz = [[None] * 3 for _ in range(4)]
-    linha_legendas = ["Q1", "Q2", "F1", "F2"]
-    for i in range(4):
-        linha_legenda = tk.Label(janela, text=linha_legendas[i])
-        linha_legenda.grid(row=i + 1, column=0)
-        for j in range(3):
-            entrada_matriz[i][j] = tk.Entry(janela)
-            entrada_matriz[i][j].grid(row=i + 1, column=j + 1)
+print("\n","Matriz original: \n")
+print(pd.DataFrame(matriz_escolhida, index=['']*len(matrix), columns=['']*len(matrix[0])),"\n")
 
-    # Cria um botão para processar a matriz
-    botao_processar = tk.Button(janela, text="Processar", command=obter_numeros)
-    botao_processar.grid(row=5, columnspan=4)
+# Quais as combinações possíveis pelo RPS?
+loop.loop_RPS("QmTOxFmTO")
+loop.completando_utilidades()
+loop.plot_multiple()
 
-    # Inicializa a GUI
-    janela.mainloop()
+# Das correntes que sobraram, pode haver outro loop
+if loop.is_there_two_chains == True:
+    print("\n","------------------------------","\n")
 
-    #offer_demand(matriz_2, intervals_2, 10)
+    print(f"A combinação fora do loop é: Q{loop.chains_not_in_the_loop[0]+1}xF{loop.chains_not_in_the_loop[1]+1}")
+    matriz_loop2 = loop.matrix
+    loop2 = IntegraçãoEnergética(matriz_loop2, delta_T_min, Qx=loop.chains_not_in_the_loop[0], Fx=loop.chains_not_in_the_loop[1], user_input=user_input)
+    loop2.loop_RPS("QmTOxFmTO")
+    loop2.completando_utilidades()
+    loop2.plot_multiple()
 
-    #RPS(matriz_2, 10)
 
-else:
-    # tipo = QMTOxFMTO, QmTOxFmTO, QmTOxFMTO, QMTOxFmTO
 
-    plot_multiple,plot_multiple_chains,last_matrix,is_there_two_chains =  perform_RPS(matriz, Qx=None, Fx=None,tipo='QMTOxFmTO', plot=True)
-
-    plot_multiple_transfers(plot_multiple, last_matrix,is_there_two_chains)
-
-    if plot_multiple_chains != []:
-        plot_multiple_transfers(plot_multiple_chains, last_matrix,is_there_two_chains)
+"""
+QMTOxFMTO
+QmTOxFmTO
+"""
