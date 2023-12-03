@@ -37,6 +37,7 @@ class IntegraçãoEnergética:
                         [0,0]]
         self.comb_history = []
         self.used = [0,0,0,0]
+        self.intervals = []
 
     def perform_transform(self, Qx, Fx):
         
@@ -196,6 +197,124 @@ class IntegraçãoEnergética:
     def atualizar_prev_matrix(self, prev_matrix):
         self.prev_matrix = prev_matrix
 
+    def draw_arrow(self, text,x, start, end, color_arrow):
+        arrowprops = dict(arrowstyle='->', linestyle='-', linewidth=2, color=color_arrow)
+        plt.annotate(text, xy=(x, end), xytext=(x, start), arrowprops=arrowprops, color=color_arrow)
+
+    def criar_grafico(self): 
+        y1 = [self.matrix[0][1], self.matrix[0][2], self.matrix[1][1], self.matrix[1][2]]  # Q1_To, Q1_Td, Q2_To, Q2_Td
+        y2 = [self.matrix[2][1], self.matrix[2][2], self.matrix[3][1], self.matrix[3][2]]  # F1_To, F1_Td, F2_To, F2_Td
+
+        x1 = [0, 0.5, 0.5, 1]  # Pontos de mudança nos degraus para y1
+        x2 = [0.5, 1, 0, 0.5]  # Pontos de mudança nos degraus para y2
+        
+        y_ticks = []
+
+        for i in y1:
+            plot_y1_step = [i,i,i-10, i-10]
+            plt.step(x1, plot_y1_step)
+
+            y_ticks.append(i)
+            y_ticks.append(i-10)
+            self.intervals.append(i-10)
+
+        for i in y2:
+            plot_y2_step = [i+10,i+10,i, i]
+            plt.step(x1, plot_y2_step)
+            y_ticks.append(i)
+            y_ticks.append(i+10)
+            self.intervals.append(i)
+
+        self.intervals = list(set(self.intervals)) # sort and remove duplicates
+        self.intervals.sort(reverse=True)
+        #print(intervals)
+        plt.tick_params(axis='y', which='both', labelleft='on', labelright='on')
+        plt.xticks([])
+
+        self.draw_arrow("",0.2,self.matrix[0][1],self.matrix[0][2], "red")
+        self.draw_arrow("",0.4,self.matrix[1][1],self.matrix[1][2], "red")
+
+        self.draw_arrow("",0.6,self.matrix[2][1],self.matrix[2][2], "blue")
+        self.draw_arrow("",0.8,self.matrix[3][1],self.matrix[3][2], "blue")
+
+        plt.grid(linestyle = '--')
+        plt.show()
+
+    def display_table(self, data):
+        root = tk.Tk()
+        root.title("Table Display")
+
+        columns = ["Intervalo"] + ["R(k-1)"] + ["Oferta"] + ["Demanda"] + ["Sk"]
+
+        # Create a Treeview widget
+        table = ttk.Treeview(root, columns=columns, show="headings")
+
+        # Set column headings with center alignment
+        for col in columns:
+            table.heading(col, text=col, anchor="center")
+
+        # Insert data into the table with center alignment
+        for i, row in enumerate(data, start=1):
+            values = [i] + row
+            table.insert("", "end", values=values, tags=("centered",))
+
+        # Center the cell values
+        table.tag_configure("centered", anchor="center")
+
+        # Pack the Treeview widget
+        table.pack()
+
+        root.mainloop()
+
+    def is_pair_overlapping(self, pair1, pair2):
+        # Sort the pairs to ensure proper comparison
+        pair1 = sorted(pair1)
+        pair2 = sorted(pair2)
+
+        # Check if pair1 is completely within pair2
+        return pair1[0] >= pair2[0] and pair1[1] <= pair2[1]
+    
+    def offer_demand(self):
+        
+        Rk = 0
+        a1 = 1
+        a2 = 1
+        offer_demand = []
+
+        for i in range(len(self.intervals)-1): 
+            
+            if self.is_pair_overlapping((self.intervals[i]+self.delta_T_min, self.intervals[i+1]+self.delta_T_min), (self.matrix[0][2], self.matrix[0][1])): # passa por arrow1
+                a1 = self.matrix[0][0]
+            else:
+                a1 = 0
+
+            if self.is_pair_overlapping((self.intervals[i]+self.delta_T_min, self.intervals[i+1]+self.delta_T_min), (self.matrix[1][2], self.matrix[1][1])): # passa por arrow2
+                a2 = self.matrix[1][0]
+            else:
+                a2 = 0
+
+            if self.is_pair_overlapping((self.intervals[i], self.intervals[i+1]), (self.matrix[2][2], self.matrix[2][1])): # passa por arrow3
+                a3 = self.matrix[2][0]
+            else:
+                a3 = 0
+
+            if self.is_pair_overlapping((self.intervals[i], self.intervals[i+1]), (self.matrix[3][2], self.matrix[3][1])): # passa por arrow4
+                a4 = self.matrix[3][0]
+            else:
+                a4 = 0
+            
+            y = (self.intervals[i]-self.intervals[i+1])
+            lines = [Rk, y*a1 +y*a2, y*a3 +y*a4, Rk + y*a1 +y*a2 - y*a3 - y*a4]
+
+            if lines[3] < 0: # pinch
+                Rk = 0 
+            else:
+                Rk = lines[3]
+            
+            offer_demand.append(lines)
+        
+        self.display_table(offer_demand)
+    
     def loop_RPS(self, tipo):
         while True:
             if self.user_input == False:
@@ -217,17 +336,24 @@ class IntegraçãoEnergética:
 
             else:
                 valid = self.valid_combinations()
+                
+                are_all_none = all(item is None for item in valid) # Primeira condição de quebra -> Deve haver combinações possíveis
 
-                are_all_none = all(item is None for item in valid)
+                troca_igual_anterior = False
 
-                if are_all_none:
-                    print("Não há mais combinações possíveis")
+                if len(valid) == 1 and valid[0] in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
+                    troca_igual_anterior = True
+                
+                if are_all_none or troca_igual_anterior:
+                    print("\n","------------------------------","\n")
+                    print("NÃO HÁ MAIS COMBINAÇÕES POSSÍVEIS. COMPLETANDO COM UTILIDADES.")
                     break
                 else:
                     for i in range(len(valid)):
                         print(f"Combinação válida: Q{valid[i][0]+1}xF{valid[i][1]+1}")
-
+                
                     comb = [0,0]
+
                     comb[0] = int(input("Escolha a corrente quente: Q")) -1
                     comb[1] = int(input("Escolha a corrente fria: F")) -1
             
@@ -255,7 +381,6 @@ class IntegraçãoEnergética:
 
             self.comb_history.append(comb)
             self.last_comb = comb
-            self.iterations += 1
 
     def completando_utilidades(self):
 
@@ -521,6 +646,8 @@ user_input = True
 
 delta_T_min = 10
 loop = IntegraçãoEnergética(matriz_escolhida, delta_T_min, Qx=None, Fx=None, user_input=user_input) #Qx=0 e Fx=1 dão erro
+loop.criar_grafico()
+loop.offer_demand()
 
 print("\n","Matriz original: \n")
 print(pd.DataFrame(matriz_escolhida, index=['']*len(matrix), columns=['']*len(matrix[0])),"\n")
