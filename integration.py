@@ -20,6 +20,8 @@ class IntegraçãoEnergética:
         self.delta_T_min = delta_T_min
         self.custo_cap = 0
         self.custo_util = 0
+        self.custo_min_vapor = 0
+        self.custo_min_agua = 0
         self.Q = 0
         self.last_comb = (-10,-10)
         self.is_there_two_chains = False
@@ -277,6 +279,8 @@ class IntegraçãoEnergética:
     def offer_demand(self):
         
         Rk = 0
+        custo_min_vapor = 0
+        custo_min_agua = 0
         a1 = 1
         a2 = 1
         offer_demand = []
@@ -308,11 +312,18 @@ class IntegraçãoEnergética:
 
             if lines[3] < 0: # pinch
                 Rk = 0 
+                self.custo_util_min(abs(lines[3]), 1.00) # 1.00 pois é vapor
+                print(f"Custo mínimo de utilidades(vapor):  {abs(round(lines[3],2))}kW, ou {round(self.custo_min_vapor,2)}$")
             else:
                 Rk = lines[3]
+
+                if i == len(self.intervals)-2:
+                    self.custo_util_min(abs(lines[3]), 0.75) # 0.75 pois é água
+                    print(f"Custo mínimo de utilidades(água): {abs(round(lines[3],2))}kW, ou {round(self.custo_min_agua,2)}$")
             
             offer_demand.append(lines)
-        
+
+        print(f"Custo mínimo de utilidades(total): {round(self.custo_min_agua+self.custo_min_vapor,2)}$")
         self.display_table(offer_demand)
     
     def loop_RPS(self, tipo):
@@ -521,6 +532,18 @@ class IntegraçãoEnergética:
             self.custo_util += 8500*(self.custo_unit_vapor*W)
         
         print("Novo custo útil:", round(self.custo_util,2),"\n")
+
+    def custo_util_min(self, Q, U):
+
+        if U == 0.75: # Resfriador
+
+            W = Q/((0.00116)*(self.temp_agua[1] - self.temp_agua[0])) # 0.00116 = Cp_água
+            self.custo_min_agua = 8500*(self.custo_unit_agua*W)
+
+        if U == 1.00: # Aquecedor
+
+            W = Q/0.48 # 0.48 = Cp_vapor
+            self.custo_min_vapor = 8500*(self.custo_unit_vapor*W)
 
     def plot_single(self, plot_list, id_plot, last):
 

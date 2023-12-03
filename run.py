@@ -3,7 +3,7 @@ import pandas as pd
 import tkinter as tk
 from tkinter import ttk
 
-input = True
+input = False
 matrix = []
 
 # Função chamada quando o botão é clicado
