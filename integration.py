@@ -70,11 +70,11 @@ class IntegraçãoEnergética:
 
         # Se entrada quente - saída fria é menor que ΔT(min)
         if TEQ_fixado - TSF_meta < self.delta_T_min:
-            TSF_meta = TEQ_fixado - 10
+            TSF_meta = TEQ_fixado - self.delta_T_min
 
         # Se saída quente - entrada fria é menor que ΔT(min)
         if TSQ_meta - TEF_fixado < self.delta_T_min:
-            TSQ_meta = TEF_fixado + 10
+            TSQ_meta = TEF_fixado + self.delta_T_min
 
         oferta =  WCp_Q * (TEQ_fixado - TSQ_meta)
         demanda = WCp_F * (TSF_meta - TEF_fixado)
@@ -346,27 +346,33 @@ class IntegraçãoEnergética:
                     break
 
             else:
-                valid = self.valid_combinations()
-                
-                are_all_none = all(item is None for item in valid) # Primeira condição de quebra -> Deve haver combinações possíveis
+                if self.iterations == 0 and self.Qx_init != None and self.Fx_init != None:
+                    comb = (self.Qx_init, self.Fx_init)
+                else: 
+                    valid = self.valid_combinations()
+                    
+                    are_all_none = all(item is None for item in valid) # Primeira condição de quebra -> Deve haver combinações possíveis
 
-                troca_igual_anterior = False
+                    if are_all_none:
+                        print("\n","------------------------------","\n")
+                        print("NÃO HÁ MAIS COMBINAÇÕES POSSÍVEIS. COMPLETANDO COM UTILIDADES.") 
+                        break
+                    else:
+                        for i in range(len(valid)):
+                            print(f"Combinação válida: Q{valid[i][0]+1}xF{valid[i][1]+1}")
+                    
+                        comb = [0,0]
 
-                if len(valid) == 1 and valid[0] in self.comb_history: # Segunda condição de quebra -> As combinações não podem ser iguais
-                    troca_igual_anterior = True
-                
-                if are_all_none or troca_igual_anterior:
-                    print("\n","------------------------------","\n")
-                    print("NÃO HÁ MAIS COMBINAÇÕES POSSÍVEIS. COMPLETANDO COM UTILIDADES.")
-                    break
-                else:
-                    for i in range(len(valid)):
-                        print(f"Combinação válida: Q{valid[i][0]+1}xF{valid[i][1]+1}")
-                
-                    comb = [0,0]
+                        comb[0] = int(input("Escolha a corrente quente: Q")) -1
+                        comb[1] = int(input("Escolha a corrente fria: F")) -1
 
-                    comb[0] = int(input("Escolha a corrente quente: Q")) -1
-                    comb[1] = int(input("Escolha a corrente fria: F")) -1
+                        if comb[0] != self.last_comb[0] and comb[1] != self.last_comb[1] and self.iterations != 0: # Segunda condição de quebra -> As combinações não podem ser iguais
+                            print("\n","------------------------------","\n")
+                            print("COMBINAÇÃO FORA DA REDE. COMPLETANDO COM UTILIDADES A PRIMEIRA E CRIANDO OUTRA REDE.") 
+
+                            self.is_there_two_chains = True
+                            self.chains_not_in_the_loop = (comb[0],comb[1])
+                            break
             
             self.used[comb[0]] = True
             self.used[comb[1]+2] = True
@@ -392,6 +398,8 @@ class IntegraçãoEnergética:
 
             self.comb_history.append(comb)
             self.last_comb = comb
+
+            self.iterations += 1
 
     def completando_utilidades(self):
 
@@ -510,8 +518,8 @@ class IntegraçãoEnergética:
         else:
             area = self.Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
 
-        custo_do_trocador = 130 * (math.pow(area, (65/100)))
-        
+        custo_do_trocador = 130 * (math.pow(area, (65/100))) # EQUAÇÃO DO MODELO DE CUSTO DO TROCADOR -> SLIDE
+
         self.custo_cap += custo_do_trocador
         print("Novo custo cap:", round(self.custo_cap,2))
 

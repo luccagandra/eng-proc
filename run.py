@@ -49,10 +49,10 @@ else:
             [5.0, 60.0, 150.0],  # WCp, F1_T0, F1_Td
             [7.0, 100.0, 220.0]] # WCp, F2_T0, F2_Td
 
-    """matriz_aula = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
+    matriz_aula = [[3.0, 170.0, 60.0], # WCp, Q1_T0, Q1_Td
                 [1.5, 150.0, 30.0], # WCp, Q2_T0, Q2_Td
                 [2.0, 30.0, 140.0],  # WCp, F1_T0, F1_Td
-                [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td"""
+                [4.0, 80.0, 140.0]] # WCp, F2_T0, F2_Td
 
 matriz_escolhida = matrix
 user_input = True
@@ -80,6 +80,11 @@ if loop.is_there_two_chains == True:
     loop2.loop_RPS("QmTOxFmTO")
     loop2.completando_utilidades()
     loop2.plot_multiple()
+
+    print("\n","------------------------------","\n")
+    print(f"Custo cap total (duas redes): {round(loop.custo_cap,2)}+{round(loop2.custo_cap,2)}={round(loop.custo_cap+loop2.custo_cap,2)}")
+    print(f"Custo útil total (duas redes): {round(loop.custo_util,2)}+{round(loop2.custo_util,2)}={round(loop.custo_util+loop2.custo_util,2)}")
+    print(f"Custo total (duas redes): {round(loop.custo_util+loop2.custo_util+loop.custo_cap+loop2.custo_cap,2)}")
 
 
 
