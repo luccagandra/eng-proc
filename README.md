@@ -7,9 +7,9 @@ Manual de uso está na pasta "/anexos"
 
 ## Rede Final e Custos
 
-<img src="anexos/rede.png" width="384"/>
+<img src="anexos/rede.png" width="600"/>
 
 ## Oferta e demanda
 
-<img src="anexos/grafico.png" width="384"/>
-<img src="anexos/oferta_demanda.png" width="384"/>
+<img src="anexos/grafico.png" width="600"/>
+<img src="anexos/oferta_demanda.png" width="600"/>
