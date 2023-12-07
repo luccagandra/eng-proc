@@ -8,16 +8,14 @@ import numpy as np
 import math
 
 class IntegraçãoEnergética:
-    def __init__(self, matrix, delta_T_min, Qx=None, Fx=None, user_input=False):
+    def __init__(self, matrix, delta_T_min=10, Qx=None, Fx=None, U_tc=0.75, U_re=0.75, U_aq=1.00,custo_unit_agua=0.00005,custo_unit_vapor=0.0015,temp_vapor=(250,250),temp_agua=(30,50),  user_input=False):
+        # Define propriedades e variáveis que serão usadas nos cálculos
         self.matrix = matrix
         self.user_input = user_input
-        self.Qx_init = Qx
-        self.Fx_init = Fx
         self.prev_matrix = [[0.0, 0.0, 0.0],
                             [0.0, 0.0, 0.0],
                             [0.0, 0.0, 0.0], 
                             [0.0, 0.0, 0.0]]
-        self.delta_T_min = delta_T_min
         self.custo_cap = 0
         self.custo_util = 0
         self.custo_min_vapor = 0
@@ -26,12 +24,8 @@ class IntegraçãoEnergética:
         self.last_comb = (-10,-10)
         self.is_there_two_chains = False
         self.chains_not_in_the_loop = (-1,-1)
-        self.temp_vapor = (250,250) # T_in, T_out
-        self.temp_agua = (30,50) # T_in, T_out
         self.plot = []
         self.iterations = 0
-        self.custo_unit_agua = 0.00005
-        self.custo_unit_vapor = 0.0015
         self.coordinates = [0,0]
         self.F_coords= [[0,0],
                         [0,0]]
@@ -41,8 +35,19 @@ class IntegraçãoEnergética:
         self.used = [0,0,0,0]
         self.intervals = []
 
+        self.Qx_init = Qx
+        self.Fx_init = Fx
+        self.temp_vapor = temp_vapor # T_e, T_s - Mudar caso a corrente de vapor apresente temperaturas diferentes
+        self.temp_agua = temp_agua # T_e, T_s - Mudar caso a corrente de água apresente temperaturas diferentes
+        self.delta_T_min = delta_T_min
+        self.custo_unit_agua = custo_unit_agua # Mudar caso o custo da água for diferente
+        self.custo_unit_vapor = custo_unit_vapor # Mudar caso o custo do vapor for diferente
+        self.U_tc = U_tc # Mudar caso o coeficiente de troca de calor global do trocador de integração for diferente
+        self.U_re = U_re # Mudar caso o coeficiente de troca de calor global do resfriador for diferente
+        self.U_aq = U_aq # Mudar caso o coeficiente de troca de calor global do aquecedor for diferente
+
     def perform_transform(self, Qx, Fx):
-        
+        # Realiza os cálculos de um trocador de calor
         self.atualizar_prev_matrix(self.matrix)
 
         QMT0 = self.matrix[Qx-1].copy()
@@ -106,6 +111,9 @@ class IntegraçãoEnergética:
         return new_matrix
 
     def next_combination(self, tipo):
+        # Determina quais as trocas são válidas e quais não são
+        # Seleciona a troca a ser realizada no caso da aplicação dum um método
+        
         # Temperaturas de entrada das corrents quentes 
         # ToQ[0] = Q1, ToQ[1] = Q2
         ToQ = (self.matrix[0][1], self.matrix[1][1])
@@ -173,6 +181,8 @@ class IntegraçãoEnergética:
         return comb 
 
     def valid_combinations(self):
+        # Chama o método anterior e as organisa numa lista
+        
         ToQ = (self.matrix[0][1], self.matrix[1][1])
 
         # Temperaturas de entrada das corrents frias
@@ -203,12 +213,11 @@ class IntegraçãoEnergética:
         arrowprops = dict(arrowstyle='->', linestyle='-', linewidth=2, color=color_arrow)
         plt.annotate(text, xy=(x, end), xytext=(x, start), arrowprops=arrowprops, color=color_arrow)
 
-    def criar_grafico(self): 
+    def criar_grafico(self):
         y1 = [self.matrix[0][1], self.matrix[0][2], self.matrix[1][1], self.matrix[1][2]]  # Q1_To, Q1_Td, Q2_To, Q2_Td
         y2 = [self.matrix[2][1], self.matrix[2][2], self.matrix[3][1], self.matrix[3][2]]  # F1_To, F1_Td, F2_To, F2_Td
 
         x1 = [0, 0.5, 0.5, 1]  # Pontos de mudança nos degraus para y1
-        x2 = [0.5, 1, 0, 0.5]  # Pontos de mudança nos degraus para y2
         
         y_ticks = []
 
@@ -277,10 +286,9 @@ class IntegraçãoEnergética:
         return pair1[0] >= pair2[0] and pair1[1] <= pair2[1]
     
     def offer_demand(self):
+        # Calcula o método do transbordo para obter o custo mínimo de utilidades
         
         Rk = 0
-        custo_min_vapor = 0
-        custo_min_agua = 0
         a1 = 1
         a2 = 1
         offer_demand = []
@@ -312,13 +320,13 @@ class IntegraçãoEnergética:
 
             if lines[3] < 0: # pinch
                 Rk = 0 
-                self.custo_util_min(abs(lines[3]), 1.00) # 1.00 pois é vapor
+                self.custo_util_min(abs(lines[3]), self.U_aq, "aquecedor")
                 print(f"Custo mínimo de utilidades(vapor):  {abs(round(lines[3],2))}kW, ou {round(self.custo_min_vapor,2)}$")
             else:
                 Rk = lines[3]
 
                 if i == len(self.intervals)-2:
-                    self.custo_util_min(abs(lines[3]), 0.75) # 0.75 pois é água
+                    self.custo_util_min(abs(lines[3]), self.U_re, "resfriador")
                     print(f"Custo mínimo de utilidades(água): {abs(round(lines[3],2))}kW, ou {round(self.custo_min_agua,2)}$")
             
             offer_demand.append(lines)
@@ -327,6 +335,8 @@ class IntegraçãoEnergética:
         self.display_table(offer_demand)
     
     def loop_RPS(self, tipo):
+        # Aplica o método do RPS
+        
         while True:
             if self.user_input == False:
                 if self.iterations == 0 and self.Qx_init != None and self.Fx_init != None:
@@ -389,7 +399,7 @@ class IntegraçãoEnergética:
             TEF = self.prev_matrix[comb[1]+2][1]
             TSF = new_matrix[comb[1]+2][1]
 
-            self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 0.75) # U = 0.75 pois é trocador de calor
+            self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, self.U_tc)
 
             Qx = comb[0]+1
             Fx = comb[1]+1
@@ -441,8 +451,8 @@ class IntegraçãoEnergética:
                 self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx]) #self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
 
                 self.print_utilidades_resfriamento(f"{i+1}", TSQ, matrix_arr[i])
-                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 0.75) # U = 0.75 pois é resfriador
-                self.atualizar_custo_util(WCp, TEQ, TSQ, 0.75) # U = 0.75 pois é resfriador
+                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, self.U_re)
+                self.atualizar_custo_util(WCp, TEQ, TSQ, self.U_re, "resfriador")
         
         for i in range(2): # Utilidades para F1 e F2
             WCp = matrix_arr[i+2,0]
@@ -467,8 +477,8 @@ class IntegraçãoEnergética:
                 self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx]) #self.plot.append([TEQ, TSQ, TEF,TSF, Qx, Fx])
 
                 self.print_utilidades_aquecimento(f"{i+1}", TSF, matrix_arr[i+2])
-                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, 1.00) # U = 1.00 pois é aquecedor
-                self.atualizar_custo_util(WCp, TSF, TEF, 1.00) # U = 1.00 pois é aquecedor
+                self.atualizar_custo_cap(TEQ, TSF, TSQ, TEF, self.U_aq)
+                self.atualizar_custo_util(WCp, TSF, TEF, self.U_aq, "aquecedor")
 
     def print_comb(self, comb, new_matrix):
         
@@ -518,39 +528,44 @@ class IntegraçãoEnergética:
         else:
             area = self.Q / (U*(delta_1-delta_2)/np.log(delta_1/delta_2))
 
+        # Mudar caso o modelo do custo de capital for diferente
         custo_do_trocador = 130 * (math.pow(area, (65/100))) # EQUAÇÃO DO MODELO DE CUSTO DO TROCADOR -> SLIDE
 
         self.custo_cap += custo_do_trocador
         print("Novo custo cap:", round(self.custo_cap,2))
 
-    def atualizar_custo_util(self, WCp, T_in, T_out, U):
+    def atualizar_custo_util(self, WCp, T_in, T_out, U, tipo):
 
         Q = WCp*(T_in - T_out)
 
         # W = vazão
 
-        if U == 0.75: # Resfriador
+        if tipo == "resfriador":
 
             W = Q/((0.00116)*(self.temp_agua[1] - self.temp_agua[0])) # 0.00116 = Cp_água
+            # Mudar caso o modelo do custo de utilidades for diferente
             self.custo_util += 8500*(self.custo_unit_agua*W)
 
-        if U == 1.00: # Aquecedor
+        if tipo == "aquecedor":
 
             W = Q/0.48 # 0.48 = Cp_vapor
+            # Mudar caso o modelo do custo de utilidades for diferente
             self.custo_util += 8500*(self.custo_unit_vapor*W)
         
         print("Novo custo útil:", round(self.custo_util,2),"\n")
 
-    def custo_util_min(self, Q, U):
+    def custo_util_min(self, Q, U, tipo):
 
-        if U == 0.75: # Resfriador
+        if tipo == "resfriador":
 
             W = Q/((0.00116)*(self.temp_agua[1] - self.temp_agua[0])) # 0.00116 = Cp_água
+            # Mudar caso o modelo do custo de utilidades for diferente
             self.custo_min_agua = 8500*(self.custo_unit_agua*W)
 
-        if U == 1.00: # Aquecedor
+        if tipo == "aquecedor":
 
             W = Q/0.48 # 0.48 = Cp_vapor
+            # Mudar caso o modelo do custo de utilidades for diferente
             self.custo_min_vapor = 8500*(self.custo_unit_vapor*W)
 
     def plot_single(self, plot_list, id_plot, last):
